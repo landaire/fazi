@@ -16,3 +16,7 @@ signal-hook ="0.3"
 clap = { version = "3.0", features = ["derive"] }
 hex = "0.4"
 sha1 = "0.10"
+
+[features]
+default = ["main_entrypoint"]
+main_entrypoint = []

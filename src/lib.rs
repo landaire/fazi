@@ -3,6 +3,7 @@
 use std::{collections::BTreeSet, fs, path::Path, sync::Arc};
 
 use crate::options::RuntimeOptions;
+use crate::weak::weak;
 use clap::StructOpt;
 use rand::{distributions::Standard, prelude::*, SeedableRng};
 
@@ -12,6 +13,7 @@ mod mutations;
 mod options;
 mod signal;
 mod weak;
+mod exports;
 
 // extern "C" {
 //     #[linkage = "weak"]
@@ -25,6 +27,7 @@ pub struct Fazi<R: Rng> {
     dictionary: Vec<Vec<u8>>,
     corpus: Vec<Arc<Vec<u8>>>,
     options: RuntimeOptions,
+    iterations: usize,
 }
 
 impl Default for Fazi<StdRng> {
@@ -35,6 +38,7 @@ impl Default for Fazi<StdRng> {
             dictionary: vec![],
             corpus: Default::default(),
             options: Default::default(),
+            iterations: 0,
         }
     }
 }
@@ -47,6 +51,7 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             dictionary: vec![],
             corpus: Default::default(),
             options: Default::default(),
+            iterations: 0,
         }
     }
 
@@ -57,6 +62,7 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             dictionary: vec![],
             corpus: Default::default(),
             options: Default::default(),
+            iterations: 0,
         }
     }
 
@@ -85,6 +91,15 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             }
         }
     }
+}
+
+pub(crate) fn libfuzzer_runone_fn() -> unsafe extern "C" fn(*const u8, usize) -> std::os::raw::c_int
+{
+    weak!(fn LLVMFuzzerTestOneInput(*const u8, usize) -> std::os::raw::c_int);
+
+    LLVMFuzzerTestOneInput
+        .get()
+        .expect("failed to get LLVMFuzzerTestOneInput")
 }
 
 #[cfg(test)]
