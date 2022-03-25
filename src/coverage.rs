@@ -51,14 +51,26 @@ extern "C" fn __sanitizer_cov_pcs_init(
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_pc_indir(callee: *const std::ffi::c_void) {
-    todo!()
+    let caller_pc = get_caller_address();
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .insert(caller_pc);
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCallerCallee(PC, Callee);
 }
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_cmp8(arg1: u64, arg2: u64) {
-    todo!()
+    let caller_pc = get_caller_address();
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .insert(caller_pc);
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Arg1, Arg2);
 }
@@ -70,24 +82,41 @@ extern "C" fn __sanitizer_cov_trace_cmp8(arg1: u64, arg2: u64) {
 extern "C" fn __sanitizer_cov_trace_const_cmp8(arg1: u64, arg2: u64) {
     // println!("{}, {}", arg1, arg2);
     let constants = CONSTANTS.get().expect("constants global not initialized");
-    let mut  constants = constants.lock().expect("failed to lock CONSTANTS global");
+    let mut constants = constants.lock().expect("failed to lock CONSTANTS global");
 
     if arg2 <= u8::MAX.try_into().unwrap() {
-        constants.u8cov.insert(arg1.try_into().expect("cmp4 with argument greater than 8 bits?"));
+        constants.u8cov.insert(
+            arg1.try_into()
+                .expect("cmp4 with argument greater than 8 bits?"),
+        );
     }
 
     if arg2 <= u16::MAX.try_into().unwrap() {
-        constants.u16cov.insert(arg1.try_into().expect("cmp4 with argument greater than 16 bits?"));
+        constants.u16cov.insert(
+            arg1.try_into()
+                .expect("cmp4 with argument greater than 16 bits?"),
+        );
     }
 
     if arg2 <= u32::MAX.try_into().unwrap() {
-        constants.u32cov.insert(arg1.try_into().expect("cmp4 with argument greater than 32 bits?"));
+        constants.u32cov.insert(
+            arg1.try_into()
+                .expect("cmp4 with argument greater than 32 bits?"),
+        );
     }
 
-    constants.u64cov.insert(arg1.try_into().expect("cmp4 with argument greater than 64 bits?"));
+    constants.u64cov.insert(
+        arg1.try_into()
+            .expect("cmp4 with argument greater than 64 bits?"),
+    );
 
     let caller_pc = get_caller_address();
-    COVERAGE.get().expect("failed to get COVERAGE").lock().expect("failed to lock COVERAGE").insert(caller_pc);
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .insert(caller_pc);
     // todo!()
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Arg1, Arg2);
@@ -95,7 +124,14 @@ extern "C" fn __sanitizer_cov_trace_const_cmp8(arg1: u64, arg2: u64) {
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_cmp4(arg1: u32, arg2: u32) {
-    todo!()
+    let caller_pc = get_caller_address();
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .insert(caller_pc);
+    // todo!()
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Arg1, Arg2);
 }
@@ -104,41 +140,88 @@ extern "C" fn __sanitizer_cov_trace_cmp4(arg1: u32, arg2: u32) {
 extern "C" fn __sanitizer_cov_trace_const_cmp4(arg1: u32, arg2: u32) {
     // println!("{}, {}", arg1, arg2);
     let constants = CONSTANTS.get().expect("constants global not initialized");
-    let mut  constants = constants.lock().expect("failed to lock CONSTANTS global");
+    let mut constants = constants.lock().expect("failed to lock CONSTANTS global");
     // Insert into all tables at least 32 bits in size if this number fits
     if arg2 <= u8::MAX.try_into().unwrap() {
-        constants.u8cov.insert(arg1.try_into().expect("cmp4 with argument greater than 8 bits?"));
+        constants.u8cov.insert(
+            arg1.try_into()
+                .expect("cmp4 with argument greater than 8 bits?"),
+        );
     }
 
     if arg2 <= u16::MAX.try_into().unwrap() {
-        constants.u16cov.insert(arg1.try_into().expect("cmp4 with argument greater than 8 bits?"));
+        constants.u16cov.insert(
+            arg1.try_into()
+                .expect("cmp4 with argument greater than 8 bits?"),
+        );
     }
 
-    constants.u32cov.insert(arg1.try_into().expect("cmp4 with argument greater than 8 bits?"));
+    constants.u32cov.insert(
+        arg1.try_into()
+            .expect("cmp4 with argument greater than 8 bits?"),
+    );
 
     let caller_pc = get_caller_address();
-    COVERAGE.get().expect("failed to get COVERAGE").lock().expect("failed to lock COVERAGE").insert(caller_pc);
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .insert(caller_pc);
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Arg1, Arg2);
 }
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_cmp2(arg1: u16, arg2: u16) {
-    todo!()
+    let caller_pc = get_caller_address();
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .insert(caller_pc);
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Arg1, Arg2);
 }
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_const_cmp2(arg1: u16, arg2: u16) {
-    todo!()
+    let constants = CONSTANTS.get().expect("constants global not initialized");
+    let mut constants = constants.lock().expect("failed to lock CONSTANTS global");
+    // Insert into all tables at least 32 bits in size if this number fits
+    if arg2 <= u8::MAX.try_into().unwrap() {
+        constants.u8cov.insert(
+            arg1.try_into()
+                .expect("cmp4 with argument greater than 8 bits?"),
+        );
+    }
+
+    constants.u16cov.insert(
+        arg1.try_into()
+            .expect("cmp4 with argument greater than 8 bits?"),
+    );
+
+    let caller_pc = get_caller_address();
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .insert(caller_pc);
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Arg1, Arg2);
 }
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_cmp1(arg1: u8, arg2: u8) {
-    todo!()
+    let caller_pc = get_caller_address();
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .insert(caller_pc);
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Arg1, Arg2);
 }
@@ -146,12 +229,20 @@ extern "C" fn __sanitizer_cov_trace_cmp1(arg1: u8, arg2: u8) {
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_const_cmp1(arg1: u8, arg2: u8) {
     let constants = CONSTANTS.get().expect("constants global not initialized");
-    let mut  constants = constants.lock().expect("failed to lock CONSTANTS global");
+    let mut constants = constants.lock().expect("failed to lock CONSTANTS global");
     // Insert into all tables at least 32 bits in size if this number fits
-    constants.u8cov.insert(arg1.try_into().expect("cmp4 with argument greater than 8 bits?"));
+    constants.u8cov.insert(
+        arg1.try_into()
+            .expect("cmp4 with argument greater than 8 bits?"),
+    );
 
     let caller_pc = get_caller_address();
-    COVERAGE.get().expect("failed to get COVERAGE").lock().expect("failed to lock COVERAGE").insert(caller_pc);
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .insert(caller_pc);
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Arg1, Arg2);
 }
@@ -204,21 +295,40 @@ extern "C" fn __sanitizer_cov_trace_switch(val: u64, cases: *const u64) {
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_div4(val: u32) {
-    todo!()
+    let caller_pc = get_caller_address();
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .insert(caller_pc);
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Val, (uint32_t)0);
 }
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_div8(val: u64) {
-    todo!()
+    let caller_pc = get_caller_address();
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .insert(caller_pc);
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Val, (uint64_t)0);
 }
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_gep(idx: *const std::ffi::c_void) {
-    todo!()
+    let caller_pc = get_caller_address();
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .insert(caller_pc);
+
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Idx, (uintptr_t)0);
 }
@@ -231,7 +341,13 @@ extern "C" fn __sanitizer_weak_hook_memcmp(
     n: usize,
     result: std::os::raw::c_int,
 ) {
-    todo!()
+    let caller_pc = get_caller_address();
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .insert(caller_pc);
     //   if (!fuzzer::RunningUserCallback) return;
     //   if (result == 0) return;  // No reason to mutate.
     //   if (n <= 1) return;  // Not interesting.
@@ -246,7 +362,13 @@ extern "C" fn __sanitizer_weak_hook_strncmp(
     n: usize,
     result: std::os::raw::c_int,
 ) {
-    todo!()
+    let caller_pc = get_caller_address();
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .insert(caller_pc);
     //   if (!fuzzer::RunningUserCallback) return;
     //   if (result == 0) return;  // No reason to mutate.
     //   size_t Len1 = fuzzer::InternalStrnlen(s1, n);
@@ -264,7 +386,13 @@ extern "C" fn __sanitizer_weak_hook_strcmp(
     s2: *const std::ffi::c_void,
     result: std::os::raw::c_int,
 ) {
-    todo!()
+    let caller_pc = get_caller_address();
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .insert(caller_pc);
     //   if (!fuzzer::RunningUserCallback) return;
     //   if (result == 0) return;  // No reason to mutate.
     //   size_t N = fuzzer::InternalStrnlen2(s1, s2);
@@ -280,7 +408,13 @@ extern "C" fn __sanitizer_weak_hook_strncasecmp(
     n: usize,
     result: std::os::raw::c_int,
 ) {
-    todo!()
+    let caller_pc = get_caller_address();
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .insert(caller_pc);
 
     //   if (!fuzzer::RunningUserCallback) return;
     //   return __sanitizer_weak_hook_strncmp(called_pc, s1, s2, n, result);
@@ -293,7 +427,13 @@ extern "C" fn __sanitizer_weak_hook_strcasecmp(
     s2: *const std::ffi::c_void,
     result: std::os::raw::c_int,
 ) {
-    todo!()
+    let caller_pc = get_caller_address();
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .insert(caller_pc);
     //   if (!fuzzer::RunningUserCallback) return;
     //   return __sanitizer_weak_hook_strcmp(called_pc, s1, s2, result);
 }
@@ -305,7 +445,13 @@ extern "C" fn __sanitizer_weak_hook_strstr(
     s2: *const std::ffi::c_void,
     result: std::os::raw::c_int,
 ) {
-    println!("strstr");
+    let caller_pc = get_caller_address();
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .insert(caller_pc);
     //   if (!fuzzer::RunningUserCallback) return;
     //   fuzzer::TPC.MMT.Add(reinterpret_cast<const uint8_t *>(s2), strlen(s2));
 }
@@ -317,7 +463,13 @@ extern "C" fn __sanitizer_weak_hook_strcasestr(
     s2: *const std::ffi::c_void,
     result: std::os::raw::c_int,
 ) {
-    todo!()
+    let caller_pc = get_caller_address();
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .insert(caller_pc);
     //   if (!fuzzer::RunningUserCallback) return;
     //   fuzzer::TPC.MMT.Add(reinterpret_cast<const uint8_t *>(s2), strlen(s2));
 }
@@ -331,7 +483,13 @@ extern "C" fn __sanitizer_weak_hook_memmem(
     len2: usize,
     result: std::os::raw::c_int,
 ) {
-    todo!()
+    let caller_pc = get_caller_address();
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .insert(caller_pc);
     //   if (!fuzzer::RunningUserCallback) return;
     //   fuzzer::TPC.MMT.Add(reinterpret_cast<const uint8_t *>(s2), len2);
 }

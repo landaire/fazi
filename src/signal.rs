@@ -1,11 +1,14 @@
-use std::{path::{PathBuf, Path}, thread};
+use std::{
+    path::{Path, PathBuf},
+    thread,
+};
 
 use libc::{SIGABRT, SIGBUS, SIGFPE, SIGILL, SIGINT, SIGSEGV};
 use rand::Rng;
 use sha1::{Digest, Sha1};
 use signal_hook::iterator::Signals;
 
-use crate::{Fazi, driver::LAST_INPUT};
+use crate::{driver::LAST_INPUT, Fazi};
 
 impl<R: Rng> Fazi<R> {
     pub(crate) fn setup_signal_handler(&self) {
@@ -16,7 +19,11 @@ impl<R: Rng> Fazi<R> {
         thread::spawn(move || {
             for sig in signals.forever() {
                 if sig == SIGABRT {
-                let last_input = LAST_INPUT.get().expect("LAST_INPUT not initialized").lock().expect("could not lock LAST_INPUT");
+                    let last_input = LAST_INPUT
+                        .get()
+                        .expect("LAST_INPUT not initialized")
+                        .lock()
+                        .expect("could not lock LAST_INPUT");
                     handle_crash(crashes_dir.as_ref(), last_input.as_slice());
                     save_input(corpus_dir.as_ref(), last_input.as_slice());
                 }
