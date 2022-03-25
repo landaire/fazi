@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rand::{prelude::{SliceRandom, IteratorRandom}, Rng};
 
 use crate::{Fazi, driver::CONSTANTS};
@@ -118,16 +120,17 @@ impl<R: Rng> Fazi<R> {
         let start_index: usize = self.rng.gen_range(0..self.input.len());
         let end_index: usize = self.rng.gen_range(start_index..self.input.len());
 
-        let draining_it = self.input.drain(start_index..end_index);
+        let input = self.input_mut();
+        let draining_it = input.drain(start_index..end_index);
         // Drop the iterator right away so that the elements are removed
         drop(draining_it);
 
         // We need to copy to a new vector to ensure that ASAN detects out-of-bounds
         // accesses
-        let mut new_vec = Vec::with_capacity(self.input.len());
-        new_vec.extend(self.input.iter());
+        let mut new_vec = Vec::with_capacity(input.len());
+        new_vec.extend(input.iter());
 
-        self.input = new_vec;
+        *self.input_mut() = new_vec;
 
         Ok(())
     }
@@ -148,11 +151,13 @@ impl<R: Rng> Fazi<R> {
             byte.unwrap()
         };
 
-        self.input.reserve_exact(1);
-        if index == self.input.len() {
-            self.input.push(byte);
+
+        let input = self.input_mut();
+        input.reserve_exact(1);
+        if index == input.len() {
+            input.push(byte);
         } else {
-            self.input.insert(index, byte);
+            input.insert(index, byte);
         }
 
         Ok(())
@@ -180,15 +185,16 @@ impl<R: Rng> Fazi<R> {
             byte.unwrap()
         };
 
+        let input = self.input_mut();
         // Reserve the number of bytes necessary
-        self.input.reserve_exact(count);
+        input.reserve_exact(count);
 
-        if index == self.input.len() {
-            self.input.extend(std::iter::repeat(byte).take(count));
+        if index == input.len() {
+            input.extend(std::iter::repeat(byte).take(count));
         } else {
             // TODO: optimize. could use a repeating iterator here probably
             for _ in 0..count {
-                self.input.insert(index, byte);
+                input.insert(index, byte);
             }
         }
 
@@ -216,7 +222,8 @@ impl<R: Rng> Fazi<R> {
             byte.unwrap()
         };
 
-        self.input[index] = byte;
+        let input = self.input_mut();
+        input[index] = byte;
 
         Ok(())
     }
@@ -229,7 +236,8 @@ impl<R: Rng> Fazi<R> {
         let byte_index: usize = self.rng.gen_range(0..self.input.len());
         let bit_index: usize = self.rng.gen_range(0..8);
 
-        self.input[byte_index] = self.input[byte_index] ^ (1 << bit_index);
+        let input = self.input_mut();
+        input[byte_index] = input[byte_index] ^ (1 << bit_index);
 
         Ok(())
     }
@@ -243,7 +251,9 @@ impl<R: Rng> Fazi<R> {
         let index: usize = self.rng.gen_range(0..self.input.len());
         let max_count = std::cmp::min(self.input.len() - index, 8);
         let count: usize = self.rng.gen_range(0..=max_count);
-        let byte_range = &mut self.input[index..index + count];
+
+        let input = Arc::make_mut(&mut self.input);
+        let byte_range = &mut input[index..index + count];
 
         byte_range.shuffle(&mut self.rng);
 
@@ -262,7 +272,8 @@ impl<R: Rng> Fazi<R> {
             .position(|&byte| byte >= b'0' && byte <= b'9')
         {
             let new_int = self.rng.gen_range(b'0'..=b'9');
-            self.input[position] = new_int;
+            let input = self.input_mut();
+            input[position] = new_int;
         } else {
             // There's no ASCII in the input
             return Err(());
@@ -318,7 +329,8 @@ impl<R: Rng> Fazi<R> {
                 }
 
                 // Treat this as a different endian from the host endian
-                let input_range = &mut self.input[index..index + bit_width];
+                let input = Arc::make_mut(&mut self.input);
+                let input_range = &mut input[index..index + bit_width];
                 let is_different_endianness = self.rng.gen();
                 let mut input_as_int = if is_different_endianness {
                     <$ty>::from_be_bytes(
@@ -356,10 +368,11 @@ impl<R: Rng> Fazi<R> {
                 IntegerWidth::U8 => {
                     let add: u8 = self.rng.gen_range(0..21);
                     let add = add.wrapping_sub(10);
+                    let input = self.input_mut();
                     if add == 0 {
-                        self.input[index] = (!self.input[index]).wrapping_add(1);
+                        input[index] = (!input[index]).wrapping_add(1);
                     } else {
-                        self.input[index] = self.input[index].wrapping_add(add);
+                        input[index] = input[index].wrapping_add(add);
                     }
                 }
                 IntegerWidth::U16 => {
@@ -385,5 +398,9 @@ impl<R: Rng> Fazi<R> {
 
     fn cross_over(&mut self) -> MutationResult {
         Ok(())
+    }
+
+    fn input_mut(&mut self) -> &mut Vec<u8> {
+        Arc::make_mut(&mut self.input)
     }
 }

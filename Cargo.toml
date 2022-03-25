@@ -12,3 +12,7 @@ crate-type = ["cdylib"]
 rand = "0.8"
 libc = "0.2"
 backtrace = "0.3"
+signal-hook ="0.3"
+clap = { version = "3.0", features = ["derive"] }
+hex = "0.4"
+sha1 = "0.10"
