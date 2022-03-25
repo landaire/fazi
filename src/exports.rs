@@ -13,6 +13,7 @@ pub struct FaziInput {
     size: usize,
 }
 
+#[no_mangle]
 pub extern "C" fn fazi_initialize() {
     CONSTANTS
         .set(Default::default())
@@ -33,6 +34,7 @@ pub extern "C" fn fazi_initialize() {
         .expect("FAZI already initialized");
 }
 
+#[no_mangle]
 pub extern "C" fn fazi_start_testcase() -> FaziInput {
     let fazi = FAZI.get()
         .expect("FAZI not initialized")
@@ -51,6 +53,7 @@ pub extern "C" fn fazi_start_testcase() -> FaziInput {
         // })
 }
 
+#[no_mangle]
 pub extern "C" fn fazi_end_testcase() {
     let mut fazi = FAZI.get()
         .expect("FAZI not initialized")
