@@ -31,13 +31,13 @@ use std::sync::atomic::{self, AtomicUsize, Ordering};
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
 macro_rules! weak {
     (fn $name:ident($($t:ty),*) -> $ret:ty) => (
-        let ref $name: ExternWeak<unsafe extern "C" fn($($t),*) -> $ret> = {
+        let ref $name: crate::weak::ExternWeak<unsafe extern "C" fn($($t),*) -> $ret> = {
             extern "C" {
                 #[linkage = "extern_weak"]
                 static $name: *const libc::c_void;
             }
             #[allow(unused_unsafe)]
-            ExternWeak::new(unsafe { $name })
+            crate::weak::ExternWeak::new(unsafe { $name })
         };
     )
 }
@@ -152,7 +152,7 @@ macro_rules! syscall {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub(crate) macro syscall {
+macro_rules! syscall {
     (fn $name:ident($($arg_name:ident: $t:ty),*) -> $ret:ty) => (
         unsafe fn $name($($arg_name:$t),*) -> $ret {
             weak! { fn $name($($t),*) -> $ret }
@@ -176,7 +176,7 @@ pub(crate) macro syscall {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub(crate) macro raw_syscall {
+macro_rules! raw_syscall {
     (fn $name:ident($($arg_name:ident: $t:ty),*) -> $ret:ty) => (
         unsafe fn $name($($arg_name:$t),*) -> $ret {
             // This looks like a hack, but concat_idents only accepts idents
@@ -205,3 +205,6 @@ macro_rules! dlsym {
 // On non-ELF targets, use the dlsym approximation of weak linkage.
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub(crate) use dlsym as weak;
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+pub(crate) use weak;

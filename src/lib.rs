@@ -1,3 +1,4 @@
+#![feature(linkage)]
 #![feature(once_cell)]
 
 use std::{collections::BTreeSet, fs, path::Path, sync::Arc};
