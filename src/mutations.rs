@@ -44,8 +44,8 @@ impl MutationStrategy {
             MutationStrategy::ShuffleBytes,
             MutationStrategy::ChangeAsciiInt,
             MutationStrategy::ChangeBinInt,
-            MutationStrategy::CopyPart,
-            MutationStrategy::CrossOver,
+            // MutationStrategy::CopyPart,
+            // MutationStrategy::CrossOver,
         ];
 
         options
@@ -65,8 +65,8 @@ impl MutationStrategy {
             MutationStrategy::ChangeBit,
             MutationStrategy::ShuffleBytes,
             MutationStrategy::ChangeBinInt,
-            MutationStrategy::CopyPart,
-            MutationStrategy::CrossOver,
+            // MutationStrategy::CopyPart,
+            // MutationStrategy::CrossOver,
         ];
 
         options

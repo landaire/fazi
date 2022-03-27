@@ -381,6 +381,12 @@ extern "C" fn __sanitizer_weak_hook_memcmp(
         .lock()
         .expect("failed to lock COVERAGE")
         .insert(caller_pc);
+
+    // if result == 0 || n <= 1 {
+    //     // these testcases aren't interesting
+    //     return;
+    // }
+
     //   if (!fuzzer::RunningUserCallback) return;
     //   if (result == 0) return;  // No reason to mutate.
     //   if (n <= 1) return;  // Not interesting.

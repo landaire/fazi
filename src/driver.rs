@@ -17,19 +17,28 @@ pub(crate) static FAZI_INITIALIZED: AtomicBool = AtomicBool::new(false);
 #[cfg(feature = "main_entrypoint")]
 #[no_mangle]
 extern "C" fn main() {
+    use std::sync::atomic::Ordering;
+
     fazi_initialize();
 
     let mut fazi = FAZI.get().expect("FAZI not initialized").lock().expect("could not lock FAZI");
 
     eprintln!("Performing recoverage");
     let f = crate::libfuzzer_runone_fn();
-    for input in fazi.corpus.iter().cloned().collect::<Vec<_>>() {
+    for input in fazi.recoverage_queue.drain(..) {
         unsafe {
             f(input.as_ptr(), input.len());
         }
-
-        fazi.end_iteration(false);
     }
+
+    let coverage = COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE");
+    let new_coverage = coverage.len();
+    COVERAGE_BEFORE_ITERATION.store(new_coverage, Ordering::Relaxed);
+    drop(coverage);
 
     eprintln!("Performing fuzzing");
     loop {

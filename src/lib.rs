@@ -31,6 +31,7 @@ pub struct Fazi<R: Rng> {
     options: RuntimeOptions,
     iterations: usize,
     min_input_size: Option<usize>,
+    recoverage_queue: Vec<Arc<Vec<u8>>>,
 }
 
 impl Default for Fazi<StdRng> {
@@ -43,6 +44,7 @@ impl Default for Fazi<StdRng> {
             options: Default::default(),
             iterations: 0,
             min_input_size: None,
+            recoverage_queue: Default::default(),
         }
     }
 }
@@ -57,6 +59,7 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             options: Default::default(),
             iterations: 0,
             min_input_size: None,
+            recoverage_queue: Default::default(),
         }
     }
 
@@ -69,6 +72,7 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             options: Default::default(),
             iterations: 0,
             min_input_size: None,
+            recoverage_queue: Default::default(),
         }
     }
 
@@ -96,6 +100,8 @@ impl<R: Rng + SeedableRng> Fazi<R> {
                 }
             }
         }
+
+        self.recoverage_queue = self.corpus.clone();
     }
 }
 

@@ -47,6 +47,45 @@ pub extern "C" fn fazi_initialize() {
 }
 
 #[no_mangle]
+pub extern "C" fn fazi_next_recoverage_testcase() -> FaziInput {
+    let mut fazi = FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
+
+    let coverage = COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE");
+    let new_coverage = coverage.len();
+    COVERAGE_BEFORE_ITERATION.store(new_coverage, Ordering::Relaxed);
+
+    // TODO: lifetime issues if the corpus entries are dropped before the caller
+    // finishes using the data. This shouldn't happen because technically the corpus
+    // entires are "static" (i.e. lifetime of the fazi object)
+    if let Some(input) = fazi.recoverage_queue.pop() {
+        FaziInput {
+            data: input.as_ptr(),
+            size: input.len(),
+        }
+    } else {
+        FaziInput {
+            data: std::ptr::null(),
+            size: 0,
+        }
+    }
+
+    // .next_iteration(|input| {
+    //     let f = libfuzzer_runone_fn();
+    //     unsafe {
+    //         f(input.as_ptr(), input.len());
+    //     }
+    // })
+}
+
+#[no_mangle]
 pub extern "C" fn fazi_start_testcase() -> FaziInput {
     let fazi = FAZI
         .get()
@@ -123,7 +162,7 @@ impl<R: Rng> Fazi<R> {
             self.min_input_size = Some(min_input_size);
         }
 
-        let can_request_more_data = self.min_input_size.is_some();
+        let can_request_more_data = !self.min_input_size.is_some();
 
         let old_coverage = COVERAGE_BEFORE_ITERATION.load(Ordering::Relaxed);
         if old_coverage != new_coverage {
@@ -144,7 +183,7 @@ impl<R: Rng> Fazi<R> {
             if let Some(input) = self
                 .corpus
                 .iter()
-                .filter(|corpus| corpus.len() >= self.min_input_size.unwrap_or(0))
+                .filter(|input| input.len() >= self.min_input_size.unwrap_or(0))
                 .choose(&mut self.rng)
             {
                 self.input = input.clone();
