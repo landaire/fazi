@@ -78,6 +78,10 @@ impl MutationStrategy {
 }
 
 impl<R: Rng> Fazi<R> {
+    pub fn extend_input(&mut self) {
+        self.insert_repeated_bytes().expect("could not extend input")
+    }
+
     pub fn mutate_input(&mut self) {
         let mut mutation_strategy = MutationStrategy::random(&mut self.rng);
 

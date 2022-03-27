@@ -1,5 +1,6 @@
 #![feature(linkage)]
 #![feature(once_cell)]
+#![feature(link_llvm_intrinsics)]
 
 use std::{collections::BTreeSet, fs, path::Path, sync::Arc};
 
@@ -14,7 +15,7 @@ mod mutations;
 mod options;
 mod signal;
 mod weak;
-mod exports;
+pub mod exports;
 
 // extern "C" {
 //     #[linkage = "weak"]
@@ -29,6 +30,7 @@ pub struct Fazi<R: Rng> {
     corpus: Vec<Arc<Vec<u8>>>,
     options: RuntimeOptions,
     iterations: usize,
+    min_input_size: Option<usize>,
 }
 
 impl Default for Fazi<StdRng> {
@@ -40,6 +42,7 @@ impl Default for Fazi<StdRng> {
             corpus: Default::default(),
             options: Default::default(),
             iterations: 0,
+            min_input_size: None,
         }
     }
 }
@@ -53,6 +56,7 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             corpus: Default::default(),
             options: Default::default(),
             iterations: 0,
+            min_input_size: None,
         }
     }
 
@@ -64,6 +68,7 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             corpus: Default::default(),
             options: Default::default(),
             iterations: 0,
+            min_input_size: None,
         }
     }
 
