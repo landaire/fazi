@@ -6,7 +6,7 @@ use std::{
     },
 };
 
-use rand::{prelude::SliceRandom, prelude::IteratorRandom, Rng};
+use rand::{prelude::IteratorRandom, prelude::SliceRandom, Rng};
 
 use crate::{
     driver::{CONSTANTS, COVERAGE, COVERAGE_BEFORE_ITERATION, FAZI, FAZI_INITIALIZED, LAST_INPUT},
@@ -167,8 +167,8 @@ impl<R: Rng> Fazi<R> {
         let old_coverage = COVERAGE_BEFORE_ITERATION.load(Ordering::Relaxed);
         if old_coverage != new_coverage {
             eprintln!(
-                "old coverage: {}, new coverage: {}",
-                old_coverage, new_coverage
+                "old coverage: {}, new coverage: {}, mutations: {:?}",
+                old_coverage, new_coverage, self.mutations
             );
 
             self.corpus.push(self.input.clone());
@@ -179,7 +179,19 @@ impl<R: Rng> Fazi<R> {
                 signal::save_input(corpus_dir.as_ref(), input.as_slice());
             });
             COVERAGE_BEFORE_ITERATION.store(new_coverage, Ordering::Relaxed);
-        } else if !need_more_data || !can_request_more_data {
+
+            self.current_mutation_depth = 0;
+            self.mutations.clear();
+
+            let mut constants = CONSTANTS
+                .get()
+                .expect("failed to get CONSTANTS")
+                .lock()
+                .expect("failed to lock CONSTANTS");
+            constants.clear();
+        } else if self.current_mutation_depth == self.options.max_mutation_depth
+            && (!need_more_data || !can_request_more_data)
+        {
             if let Some(input) = self
                 .corpus
                 .iter()
@@ -187,14 +199,25 @@ impl<R: Rng> Fazi<R> {
                 .choose(&mut self.rng)
             {
                 self.input = input.clone();
+                self.current_mutation_depth = 0;
+                self.mutations.clear();
+
+                let mut constants = CONSTANTS
+                    .get()
+                    .expect("failed to get CONSTANTS")
+                    .lock()
+                    .expect("failed to lock CONSTANTS");
+                constants.clear();
             }
         }
 
-        if need_more_data && can_request_more_data {
-            self.extend_input();
+        let mutation = if need_more_data && can_request_more_data {
+            self.extend_input()
         } else {
-            self.mutate_input();
-        }
+            self.mutate_input()
+        };
+        self.mutations.push(mutation);
+        self.current_mutation_depth += 1;
 
         let mut last_input = LAST_INPUT
             .get()

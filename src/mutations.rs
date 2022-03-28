@@ -1,15 +1,19 @@
 use std::sync::Arc;
 
-use rand::{prelude::{SliceRandom, IteratorRandom}, Rng};
+use rand::{
+    distributions::WeightedIndex,
+    prelude::{Distribution, IteratorRandom, SliceRandom},
+    Rng,
+};
 
-use crate::{Fazi, driver::CONSTANTS};
+use crate::{driver::CONSTANTS, Fazi};
 
 type MutationResult = Result<(), ()>;
 
 /// Represents a mutation strategy to take. Any newly added variants must also
 /// be added to the vector in the [`MutationStrategy::random`] function
 #[derive(Debug, Copy, Clone)]
-enum MutationStrategy {
+pub(crate) enum MutationStrategy {
     /// Erase random bytes
     EraseBytes,
     /// Insert a random byte
@@ -30,29 +34,54 @@ enum MutationStrategy {
     CopyPart,
     /// TODO: ????
     CrossOver,
+    InsertDictionaryValue,
+    UseCmpValue,
 }
 
 impl MutationStrategy {
     /// Selects a mutation strategy
     pub fn random(rng: &mut impl Rng) -> MutationStrategy {
-        let options = [
-            MutationStrategy::EraseBytes,
-            MutationStrategy::InsertByte,
-            MutationStrategy::InsertRepeatedBytes,
+        enum MutationGroup {
+            ChangeData,
+            ModifySize,
+            Any,
+        }
+        let mutation_group = if rng.gen_bool(0.90) {
+            MutationGroup::ChangeData
+        } else if rng.gen() {
+            MutationGroup::ModifySize
+        } else {
+            MutationGroup::Any
+        };
+
+        let change_data_group = [
             MutationStrategy::ChangeByte,
             MutationStrategy::ChangeBit,
+            MutationStrategy::UseCmpValue,
             MutationStrategy::ShuffleBytes,
             MutationStrategy::ChangeAsciiInt,
             MutationStrategy::ChangeBinInt,
-            // MutationStrategy::CopyPart,
-            // MutationStrategy::CrossOver,
         ];
+        let modify_size_group = [
+            MutationStrategy::EraseBytes,
+            MutationStrategy::InsertByte,
+            MutationStrategy::InsertRepeatedBytes,
+            MutationStrategy::InsertDictionaryValue,
+        ];
+        // Missing:
+        // MutationStrategy::CopyPart,
+        // MutationStrategy::CrossOver,
 
-        options
-            .as_slice()
-            .choose(rng)
-            .expect("mutation options are empty?")
-            .clone()
+        match mutation_group {
+            MutationGroup::ChangeData => change_data_group.as_slice().choose(rng).unwrap().clone(),
+            MutationGroup::ModifySize => modify_size_group.as_slice().choose(rng).unwrap().clone(),
+            MutationGroup::Any => modify_size_group
+                .iter()
+                .chain(change_data_group.iter())
+                .choose(rng)
+                .unwrap()
+                .clone(),
+        }
     }
 
     /// Selects a mutation strategy that cannot fail if the input has at least
@@ -78,11 +107,14 @@ impl MutationStrategy {
 }
 
 impl<R: Rng> Fazi<R> {
-    pub fn extend_input(&mut self) {
-        self.insert_repeated_bytes().expect("could not extend input")
+    pub(crate) fn extend_input(&mut self) -> MutationStrategy {
+        self.insert_repeated_bytes()
+            .expect("could not extend input");
+
+        MutationStrategy::InsertRepeatedBytes
     }
 
-    pub fn mutate_input(&mut self) {
+    pub(crate) fn mutate_input(&mut self) -> MutationStrategy {
         let mut mutation_strategy = MutationStrategy::random(&mut self.rng);
 
         loop {
@@ -97,9 +129,12 @@ impl<R: Rng> Fazi<R> {
                 MutationStrategy::ChangeBinInt => self.change_bin_int(),
                 MutationStrategy::CopyPart => self.copy_part(),
                 MutationStrategy::CrossOver => self.cross_over(),
+                MutationStrategy::InsertDictionaryValue => self.insert_dictionary_value(),
+                MutationStrategy::UseCmpValue => self.use_value_from_cmp_instruction(),
             };
 
             if mutation_result.is_ok() {
+                // println!("Mutation strategy: {:?}", mutation_strategy);
                 // println!("Selected mutation strategy: {:?}", mutation_strategy);
                 break;
             }
@@ -113,6 +148,8 @@ impl<R: Rng> Fazi<R> {
                 MutationStrategy::random_nonfailing_strategy(&mut self.rng)
             };
         }
+
+        mutation_strategy
     }
 
     fn erase_bytes(&mut self) -> MutationResult {
@@ -141,23 +178,11 @@ impl<R: Rng> Fazi<R> {
 
     fn insert_byte(&mut self) -> MutationResult {
         let index: usize = self.rng.gen_range(0..=self.input.len());
-        let mut byte = None;
-        if self.rng.gen_bool(0.30) {
-            let constants = CONSTANTS.get().expect("CONSTANTS not initialized").lock().expect("failed to lock CONSTANTS");
-            if !constants.u8cov.is_empty() {
-                byte = Some(constants.u8cov.iter().choose(&mut self.rng).expect("empty u8 constants").clone());
-            }
-        }
-
-        let byte = if byte.is_none() {
-            self.rng.gen()
-        } else {
-            byte.unwrap()
-        };
-
+        let byte = self.rng.gen();
 
         let input = self.input_mut();
         input.reserve_exact(1);
+
         if index == input.len() {
             input.push(byte);
         } else {
@@ -174,20 +199,8 @@ impl<R: Rng> Fazi<R> {
             self.rng.gen_range(0..=self.input.len())
         };
 
-        let count: usize = self.rng.gen_range(1..128);
-        let mut byte = None;
-        if self.rng.gen_bool(0.30) {
-            let constants = CONSTANTS.get().expect("CONSTANTS not initialized").lock().expect("failed to lock CONSTANTS");
-            if !constants.u8cov.is_empty() {
-                byte = Some(constants.u8cov.iter().choose(&mut self.rng).expect("empty u8 constants").clone());
-            }
-        }
-
-        let byte = if byte.is_none() {
-            self.rng.gen()
-        } else {
-            byte.unwrap()
-        };
+        let count: usize = self.rng.gen_range(2..128);
+        let byte = self.rng.gen();
 
         let input = self.input_mut();
         // Reserve the number of bytes necessary
@@ -205,26 +218,48 @@ impl<R: Rng> Fazi<R> {
         Ok(())
     }
 
+    fn insert_dictionary_value(&mut self) -> MutationResult {
+        Err(())
+        // let index: usize = if self.input.is_empty() {
+        //     0
+        // } else {
+        //     self.rng.gen_range(0..=self.input.len())
+        // };
+
+        // let constants = CONSTANTS
+        //     .get()
+        //     .expect("CONSTANTS not initialized")
+        //     .lock()
+        //     .expect("failed to lock CONSTANTS");
+        // if constants.binary.is_empty() {
+        //     return Err(());
+        // }
+
+        // let bytes = constants
+        //     .binary
+        //     .iter()
+        //     .choose(&mut self.rng)
+        //     .expect("empty binary constants");
+
+        // let input = self.input_mut();
+        // // Reserve the number of bytes necessary
+        // input.reserve_exact(bytes.len());
+
+        // // TODO: optimize. could use a repeating iterator here probably
+        // for &byte in bytes.iter().rev() {
+        //     input.insert(index, byte);
+        // }
+
+        // Ok(())
+    }
+
     fn change_byte(&mut self) -> MutationResult {
         if self.input.is_empty() {
             return Err(());
         }
 
         let index: usize = self.rng.gen_range(0..self.input.len());
-        let mut byte = None;
-
-        if self.rng.gen_bool(0.30) {
-            let constants = CONSTANTS.get().expect("CONSTANTS not initialized").lock().expect("failed to lock CONSTANTS");
-            if !constants.u8cov.is_empty() {
-                byte = Some(constants.u8cov.iter().choose(&mut self.rng).expect("empty u8 constants").clone());
-            }
-        }
-
-        let byte = if byte.is_none() {
-            self.rng.gen()
-        } else {
-            byte.unwrap()
-        };
+        let byte = self.rng.gen();
 
         let input = self.input_mut();
         input[index] = byte;
@@ -281,6 +316,149 @@ impl<R: Rng> Fazi<R> {
         } else {
             // There's no ASCII in the input
             return Err(());
+        }
+
+        Ok(())
+    }
+
+    fn use_value_from_cmp_instruction(&mut self) -> MutationResult {
+        if self.input.is_empty() {
+            return Err(());
+        }
+
+        #[derive(Clone)]
+        enum IntegerWidth {
+            U8,
+            U16,
+            U32,
+            U64,
+        }
+
+        let mut index = self.rng.gen_range(0..self.input.len());
+
+        // We loop until we find an integer width that fits the size of the input
+        let choices = [
+            IntegerWidth::U8,
+            IntegerWidth::U16,
+            IntegerWidth::U32,
+            IntegerWidth::U64,
+        ];
+        let mut choice = choices
+            .as_slice()
+            .choose(&mut self.rng)
+            .expect("empty choices?")
+            .clone();
+
+        choice = IntegerWidth::U8;
+
+        macro_rules! change_int {
+            ($ty:ty, $next_choice:expr) => {
+                let bit_width = std::mem::size_of::<$ty>();
+                if self.input.len() < bit_width {
+                    choice = IntegerWidth::U8;
+                    continue;
+                }
+
+                let add: $ty = self.rng.gen_range(0..21);
+                let add = add.wrapping_sub(10);
+
+                // The selected index doesn't have enough bytes left for us
+                // to manipulate. We need to adjust the index
+                let remaining_bytes = self.input.len() - index;
+                if remaining_bytes < bit_width {
+                    index -= bit_width - remaining_bytes;
+                }
+
+                // Treat this as a different endian from the host endian
+                let input = Arc::make_mut(&mut self.input);
+                let input_range = &mut input[index..index + bit_width];
+                let is_different_endianness = self.rng.gen();
+                let mut input_as_int = if is_different_endianness {
+                    <$ty>::from_be_bytes(
+                        input_range
+                            .try_into()
+                            .expect("failed to convert input slice to an array"),
+                    )
+                } else {
+                    <$ty>::from_le_bytes(
+                        input_range
+                            .try_into()
+                            .expect("failed to convert input slice to an array"),
+                    )
+                };
+
+                if add == 0 {
+                    // negate this number
+                    input_as_int = (!input_as_int).wrapping_add(1);
+                } else {
+                    input_as_int = input_as_int.wrapping_add(add);
+                }
+
+                let new_bytes = if is_different_endianness {
+                    input_as_int.to_be_bytes()
+                } else {
+                    input_as_int.to_le_bytes()
+                };
+
+                for (i, &new_byte) in new_bytes.iter().enumerate() {
+                    input_range[i] = new_byte;
+                }
+            };
+        }
+        let constants = CONSTANTS
+            .get()
+            .expect("failed to get CONSTANTS")
+            .lock()
+            .expect("failed to lock CONSTANTS");
+        loop {
+            match choice {
+                IntegerWidth::U8 => {
+                    if constants.u8cov.is_empty() {
+                        // We don't have any constants to use
+                        return Err(());
+                    }
+
+                    // Select a random pair
+                    let cmp_pair = constants
+                        .u8cov
+                        .iter()
+                        .choose(&mut self.rng)
+                        .expect("u8cov empty?");
+
+                    // Randomly select an index from the input to start our search
+                    // at.
+                    let start_idx = self.rng.gen_range(0..self.input.len());
+                    let (start, end) = self.input.split_at(start_idx);
+                    if let Some(idx) = end
+                        .iter()
+                        .chain(start.iter())
+                        .position(|&b| b == cmp_pair.0 || b == cmp_pair.1)
+                    {
+                        //if let Some(idx) = self.input.iter().position(|&b| b == cmp_pair.0 || b == cmp_pair.1) {
+                        let input = self.input_mut();
+                        if input[idx] == cmp_pair.0 {
+                            input[idx] = cmp_pair.1;
+                        } else {
+                            input[idx] = cmp_pair.0;
+                        }
+
+                        return Ok(());
+                    } else {
+                        return Err(());
+                    }
+                }
+                IntegerWidth::U16 => {
+                    change_int!(u16, IntegerWidth::U8);
+                }
+                IntegerWidth::U32 => {
+                    change_int!(u16, IntegerWidth::U16);
+                }
+                IntegerWidth::U64 => {
+                    change_int!(u16, IntegerWidth::U32);
+                }
+            }
+
+            break;
         }
 
         Ok(())
@@ -351,6 +529,7 @@ impl<R: Rng> Fazi<R> {
                 };
 
                 if add == 0 {
+                    // negate this number
                     input_as_int = (!input_as_int).wrapping_add(1);
                 } else {
                     input_as_int = input_as_int.wrapping_add(add);

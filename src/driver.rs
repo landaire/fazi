@@ -42,10 +42,10 @@ extern "C" fn main() {
 
     eprintln!("Performing fuzzing");
     loop {
-        unsafe {
-            f(fazi.input.as_ptr(), fazi.input.len());
-        }
+        let res = unsafe {
+            f(fazi.input.as_ptr(), fazi.input.len())
+        };
 
-        fazi.end_iteration(false);
+        fazi.end_iteration(res != 0);
     }
 }

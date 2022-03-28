@@ -1,10 +1,16 @@
-use std::{collections::BTreeSet, hash::Hasher};
+use std::{
+    collections::{BTreeSet, HashSet},
+    hash::Hasher,
+};
 
 use sha1::{Digest, Sha1};
 
-use crate::{driver::{CONSTANTS, COVERAGE}, exports::fazi_initialize};
+use crate::{
+    driver::{CONSTANTS, COVERAGE},
+    exports::fazi_initialize,
+};
 
-extern {
+extern "C" {
     #[link_name = "llvm.returnaddress"]
     fn return_address(a: i32) -> *const u8;
 }
@@ -17,10 +23,21 @@ macro_rules! caller_address {
 
 #[derive(Debug, Default)]
 pub(crate) struct CoverageMap {
-    pub u8cov: BTreeSet<u8>,
-    pub u16cov: BTreeSet<u16>,
-    pub u32cov: BTreeSet<u32>,
-    pub u64cov: BTreeSet<u64>,
+    pub u8cov: BTreeSet<(u8, u8)>,
+    pub u16cov: BTreeSet<(u16, u16)>,
+    pub u32cov: BTreeSet<(u32, u32)>,
+    pub u64cov: BTreeSet<(u64, u64)>,
+    pub binary: HashSet<(Vec<u8>, Vec<u8>)>,
+}
+
+impl CoverageMap {
+    pub fn clear(&mut self) {
+        self.u8cov.clear();
+        self.u16cov.clear();
+        self.u32cov.clear();
+        self.u64cov.clear();
+        self.binary.clear();
+    }
 }
 
 #[no_mangle]
@@ -112,31 +129,39 @@ extern "C" fn __sanitizer_cov_trace_const_cmp8(arg1: u64, arg2: u64) {
     let constants = CONSTANTS.get().expect("constants global not initialized");
     let mut constants = constants.lock().expect("failed to lock CONSTANTS global");
 
-    if arg1 <= u8::MAX.try_into().unwrap() {
-        constants.u8cov.insert(
+    if arg1 <= u8::MAX.try_into().unwrap() && arg2 <= u8::MAX.try_into().unwrap() {
+        constants.u8cov.insert((
             arg1.try_into()
-                .expect("cmp4 with argument greater than 8 bits?"),
-        );
+                .expect("cmp8 with argument greater than 8 bits?"),
+            arg2.try_into()
+                .expect("cmp8 with argument greater than 8 bits?"),
+        ));
     }
 
-    if arg1 <= u16::MAX.try_into().unwrap() {
-        constants.u16cov.insert(
+    if arg1 <= u16::MAX.try_into().unwrap() && arg2 <= u16::MAX.try_into().unwrap() {
+        constants.u16cov.insert((
             arg1.try_into()
-                .expect("cmp4 with argument greater than 16 bits?"),
-        );
+                .expect("cmp8 with argument greater than 8 bits?"),
+            arg2.try_into()
+                .expect("cmp8 with argument greater than 8 bits?"),
+        ));
     }
 
-    if arg1 <= u32::MAX.try_into().unwrap() {
-        constants.u32cov.insert(
+    if arg1 <= u32::MAX.try_into().unwrap() && arg2 <= u32::MAX.try_into().unwrap() {
+        constants.u32cov.insert((
             arg1.try_into()
-                .expect("cmp4 with argument greater than 32 bits?"),
-        );
+                .expect("cmp8 with argument greater than 8 bits?"),
+            arg2.try_into()
+                .expect("cmp8 with argument greater than 8 bits?"),
+        ));
     }
 
-    constants.u64cov.insert(
+    constants.u64cov.insert((
         arg1.try_into()
-            .expect("cmp4 with argument greater than 64 bits?"),
-    );
+            .expect("cmp8 with argument greater than 8 bits?"),
+        arg2.try_into()
+            .expect("cmp8 with argument greater than 8 bits?"),
+    ));
 
     let caller_pc = caller_address!();
     COVERAGE
@@ -170,25 +195,31 @@ extern "C" fn __sanitizer_cov_trace_cmp4(arg1: u32, arg2: u32) {
 extern "C" fn __sanitizer_cov_trace_const_cmp4(arg1: u32, arg2: u32) {
     let constants = CONSTANTS.get().expect("constants global not initialized");
     let mut constants = constants.lock().expect("failed to lock CONSTANTS global");
-    // Insert into all tables at least 32 bits in size if this number fits
-    if arg1 <= u8::MAX.try_into().unwrap() {
-        constants.u8cov.insert(
+
+    if arg1 <= u8::MAX.try_into().unwrap() && arg2 <= u8::MAX.try_into().unwrap() {
+        constants.u8cov.insert((
             arg1.try_into()
-                .expect("cmp4 with argument greater than 8 bits?"),
-        );
+                .expect("cmp8 with argument greater than 8 bits?"),
+            arg2.try_into()
+                .expect("cmp8 with argument greater than 8 bits?"),
+        ));
     }
 
-    if arg1 <= u16::MAX.try_into().unwrap() {
-        constants.u16cov.insert(
+    if arg1 <= u16::MAX.try_into().unwrap() && arg2 <= u16::MAX.try_into().unwrap() {
+        constants.u16cov.insert((
             arg1.try_into()
-                .expect("cmp4 with argument greater than 8 bits?"),
-        );
+                .expect("cmp8 with argument greater than 8 bits?"),
+            arg2.try_into()
+                .expect("cmp8 with argument greater than 8 bits?"),
+        ));
     }
 
-    constants.u32cov.insert(
+    constants.u32cov.insert((
         arg1.try_into()
-            .expect("cmp4 with argument greater than 8 bits?"),
-    );
+            .expect("cmp8 with argument greater than 8 bits?"),
+        arg2.try_into()
+            .expect("cmp8 with argument greater than 8 bits?"),
+    ));
 
     let caller_pc = caller_address!();
     COVERAGE
@@ -220,18 +251,22 @@ extern "C" fn __sanitizer_cov_trace_cmp2(arg1: u16, arg2: u16) {
 extern "C" fn __sanitizer_cov_trace_const_cmp2(arg1: u16, arg2: u16) {
     let constants = CONSTANTS.get().expect("constants global not initialized");
     let mut constants = constants.lock().expect("failed to lock CONSTANTS global");
-    // Insert into all tables at least 32 bits in size if this number fits
-    if arg1 <= u8::MAX.try_into().unwrap() {
-        constants.u8cov.insert(
+
+    if arg1 <= u8::MAX.try_into().unwrap() && arg2 <= u8::MAX.try_into().unwrap() {
+        constants.u8cov.insert((
             arg1.try_into()
-                .expect("cmp4 with argument greater than 8 bits?"),
-        );
+                .expect("cmp8 with argument greater than 8 bits?"),
+            arg2.try_into()
+                .expect("cmp8 with argument greater than 8 bits?"),
+        ));
     }
 
-    constants.u16cov.insert(
+    constants.u16cov.insert((
         arg1.try_into()
-            .expect("cmp4 with argument greater than 8 bits?"),
-    );
+            .expect("cmp8 with argument greater than 8 bits?"),
+        arg2.try_into()
+            .expect("cmp8 with argument greater than 8 bits?"),
+    ));
 
     let caller_pc = caller_address!();
     COVERAGE
@@ -263,11 +298,12 @@ extern "C" fn __sanitizer_cov_trace_cmp1(arg1: u8, arg2: u8) {
 extern "C" fn __sanitizer_cov_trace_const_cmp1(arg1: u8, arg2: u8) {
     let constants = CONSTANTS.get().expect("constants global not initialized");
     let mut constants = constants.lock().expect("failed to lock CONSTANTS global");
-    // Insert into all tables at least 32 bits in size if this number fits
-    constants.u8cov.insert(
+    constants.u8cov.insert((
         arg1.try_into()
-            .expect("cmp4 with argument greater than 8 bits?"),
-    );
+            .expect("cmp8 with argument greater than 8 bits?"),
+        arg2.try_into()
+            .expect("cmp8 with argument greater than 8 bits?"),
+    ));
 
     let caller_pc = caller_address!();
     COVERAGE
@@ -369,12 +405,12 @@ extern "C" fn __sanitizer_cov_trace_gep(idx: *const std::ffi::c_void) {
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_memcmp(
     caller_pc: *const std::ffi::c_void,
-    s1: *const std::ffi::c_void,
-    s2: *const std::ffi::c_void,
+    s1: *const libc::c_char,
+    s2: *const libc::c_char,
     n: usize,
     result: std::os::raw::c_int,
 ) {
-    let caller_pc = caller_address!();
+    let caller_pc = caller_pc as usize;
     COVERAGE
         .get()
         .expect("failed to get COVERAGE")
@@ -382,10 +418,19 @@ extern "C" fn __sanitizer_weak_hook_memcmp(
         .expect("failed to lock COVERAGE")
         .insert(caller_pc);
 
-    // if result == 0 || n <= 1 {
-    //     // these testcases aren't interesting
-    //     return;
-    // }
+    if result == 0 || n <= 1 {
+        println!("result isn't interesting?");
+        // these testcases aren't interesting
+        return;
+    }
+
+    let constants = CONSTANTS.get().expect("constants global not initialized");
+    let mut constants = constants.lock().expect("failed to lock CONSTANTS global");
+
+    let s1 = unsafe { std::slice::from_raw_parts(s1 as *const u8, n) }.to_vec();
+    let s2 = unsafe { std::slice::from_raw_parts(s2 as *const u8, n) }.to_vec();
+
+    constants.binary.insert((s1, s2));
 
     //   if (!fuzzer::RunningUserCallback) return;
     //   if (result == 0) return;  // No reason to mutate.
@@ -401,7 +446,7 @@ extern "C" fn __sanitizer_weak_hook_strncmp(
     n: usize,
     result: std::os::raw::c_int,
 ) {
-    let caller_pc = caller_address!();
+    let caller_pc = caller_pc as usize;
     COVERAGE
         .get()
         .expect("failed to get COVERAGE")
@@ -421,17 +466,12 @@ extern "C" fn __sanitizer_weak_hook_strncmp(
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_strcmp(
     caller_pc: *const std::ffi::c_void,
-    s1: *const std::ffi::c_void,
-    s2: *const std::ffi::c_void,
+    s1: *const libc::c_char,
+    s2: *const libc::c_char,
     result: std::os::raw::c_int,
 ) {
-    let caller_pc = caller_address!();
-    COVERAGE
-        .get()
-        .expect("failed to get COVERAGE")
-        .lock()
-        .expect("failed to lock COVERAGE")
-        .insert(caller_pc);
+    println!("strcmp hook hit");
+    __sanitizer_weak_hook_memcmp(caller_pc, s1, s2, strlen2(s1, s2), result)
     //   if (!fuzzer::RunningUserCallback) return;
     //   if (result == 0) return;  // No reason to mutate.
     //   size_t N = fuzzer::InternalStrnlen2(s1, s2);
@@ -531,4 +571,14 @@ extern "C" fn __sanitizer_weak_hook_memmem(
         .insert(caller_pc);
     //   if (!fuzzer::RunningUserCallback) return;
     //   fuzzer::TPC.MMT.Add(reinterpret_cast<const uint8_t *>(s2), len2);
+}
+
+/// Returns the minimum string length of the two arguments
+fn strlen2(s1: *const libc::c_char, s2: *const libc::c_char) -> usize {
+    let mut len = 0;
+    while unsafe { *s1.offset(len) != 0 } && unsafe { *s2.offset(len) != 0 } {
+        len += 1;
+    }
+
+    return len.try_into().expect("failed to convert len to usze");
 }

@@ -7,6 +7,7 @@ use std::{collections::BTreeSet, fs, path::Path, sync::Arc};
 use crate::options::RuntimeOptions;
 use crate::weak::weak;
 use clap::StructOpt;
+use mutations::MutationStrategy;
 use rand::{distributions::Standard, prelude::*, SeedableRng};
 
 mod coverage;
@@ -32,6 +33,8 @@ pub struct Fazi<R: Rng> {
     iterations: usize,
     min_input_size: Option<usize>,
     recoverage_queue: Vec<Arc<Vec<u8>>>,
+    current_mutation_depth: usize,
+    mutations: Vec<MutationStrategy>,
 }
 
 impl Default for Fazi<StdRng> {
@@ -45,6 +48,8 @@ impl Default for Fazi<StdRng> {
             iterations: 0,
             min_input_size: None,
             recoverage_queue: Default::default(),
+            current_mutation_depth: 0,
+            mutations: Default::default(),
         }
     }
 }
@@ -60,6 +65,8 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             iterations: 0,
             min_input_size: None,
             recoverage_queue: Default::default(),
+            current_mutation_depth: 0,
+            mutations: Default::default(),
         }
     }
 
@@ -73,6 +80,8 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             iterations: 0,
             min_input_size: None,
             recoverage_queue: Default::default(),
+            current_mutation_depth: 0,
+            mutations: Default::default(),
         }
     }
 
