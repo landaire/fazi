@@ -2,7 +2,7 @@
 #![feature(once_cell)]
 #![feature(link_llvm_intrinsics)]
 
-use std::{collections::BTreeSet, fs, path::Path, sync::Arc};
+use std::{collections::{BTreeSet, BTreeMap}, fs, path::Path, sync::Arc};
 
 use crate::options::RuntimeOptions;
 use crate::weak::weak;
@@ -23,11 +23,19 @@ pub mod exports;
 //     fn LLVMFuzzerTestOneInput(data: *const u8, size: usize) -> std::os::raw::c_int;
 // }
 
+#[derive(Debug, Default)]
+pub(crate) struct Dictionary {
+    u8dict: BTreeMap<usize, u8>,
+    u16dict: BTreeMap<usize, u16>,
+    u32dict: BTreeMap<usize, u32>,
+    u64dict: BTreeMap<usize, u64>,
+}
+
 #[derive(Debug)]
 pub struct Fazi<R: Rng> {
     rng: R,
     input: Arc<Vec<u8>>,
-    dictionary: Vec<Vec<u8>>,
+    dictionary: Dictionary,
     corpus: Vec<Arc<Vec<u8>>>,
     options: RuntimeOptions,
     iterations: usize,
@@ -35,6 +43,9 @@ pub struct Fazi<R: Rng> {
     recoverage_queue: Vec<Arc<Vec<u8>>>,
     current_mutation_depth: usize,
     mutations: Vec<MutationStrategy>,
+    max_input_size: usize,
+    current_max_mutation_len: usize,
+    last_corpus_update_run: usize,
 }
 
 impl Default for Fazi<StdRng> {
@@ -42,7 +53,7 @@ impl Default for Fazi<StdRng> {
         Fazi {
             rng: StdRng::from_entropy(),
             input: Default::default(),
-            dictionary: vec![],
+            dictionary: Default::default(),
             corpus: Default::default(),
             options: Default::default(),
             iterations: 0,
@@ -50,6 +61,9 @@ impl Default for Fazi<StdRng> {
             recoverage_queue: Default::default(),
             current_mutation_depth: 0,
             mutations: Default::default(),
+            max_input_size: 4,
+            last_corpus_update_run: 0,
+            current_max_mutation_len: 0,
         }
     }
 }
@@ -59,7 +73,7 @@ impl<R: Rng + SeedableRng> Fazi<R> {
         Fazi {
             rng: R::from_entropy(),
             input: Default::default(),
-            dictionary: vec![],
+            dictionary: Default::default(),
             corpus: Default::default(),
             options: Default::default(),
             iterations: 0,
@@ -67,6 +81,9 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             recoverage_queue: Default::default(),
             current_mutation_depth: 0,
             mutations: Default::default(),
+            max_input_size: 4,
+            last_corpus_update_run: 0,
+            current_max_mutation_len: 0,
         }
     }
 
@@ -74,7 +91,7 @@ impl<R: Rng + SeedableRng> Fazi<R> {
         Fazi {
             rng: R::from_seed(seed),
             input: Default::default(),
-            dictionary: vec![],
+            dictionary: Default::default(),
             corpus: Default::default(),
             options: Default::default(),
             iterations: 0,
@@ -82,6 +99,9 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             recoverage_queue: Default::default(),
             current_mutation_depth: 0,
             mutations: Default::default(),
+            max_input_size: 4,
+            last_corpus_update_run: 0,
+            current_max_mutation_len: 0,
         }
     }
 

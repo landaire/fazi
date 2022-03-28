@@ -14,7 +14,10 @@ pub(crate) struct RuntimeOptions {
     pub crashes_dir: PathBuf,
 
     #[clap(long, default_value = "15")]
-    pub max_mutation_depth: usize
+    pub max_mutation_depth: usize,
+
+    #[clap(long, default_value = "100")]
+    pub len_control: u32
 }
 
 impl Default for RuntimeOptions {
@@ -23,6 +26,7 @@ impl Default for RuntimeOptions {
             corpus_dir: CORPUS_DEFAULT_DIR.into(),
             crashes_dir: CRASHES_DEFAULT_DIR.into(),
             max_mutation_depth: 15,
+            len_control: 100,
         }
     }
 }

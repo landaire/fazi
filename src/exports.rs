@@ -143,6 +143,23 @@ pub extern "C" fn fazi_set_crashes_dir(dir: *const libc::c_char) {
 }
 
 impl<R: Rng> Fazi<R> {
+    pub(crate) fn update_max_size(&mut self) {
+        // Update the max length
+        if self.options.len_control > 0 && self.current_max_mutation_len < self.max_input_size {
+            let max_mutation_len_f64: f64 = self.max_input_size as f64;
+            let len_control: f64 = self.options.len_control.try_into().expect("failed to convert len_control");
+            let factor = (len_control * max_mutation_len_f64.log10()).trunc() as usize;
+            // println!("factor: {}", factor);
+            if self.iterations - self.last_corpus_update_run > factor {
+                let max_mutation_len = self.max_input_size;
+                let new_max_mutation_len = max_mutation_len + (max_mutation_len_f64.log10() as usize);
+                self.max_input_size = new_max_mutation_len;
+                // println!("Updating max length from {max_mutation_len} to {new_max_mutation_len}")
+            }
+        }
+
+        self.current_max_mutation_len = std::cmp::max(self.input.len(), self.max_input_size);
+    }
     pub(crate) fn end_iteration(&mut self, need_more_data: bool) {
         let coverage = COVERAGE
             .get()
@@ -151,6 +168,8 @@ impl<R: Rng> Fazi<R> {
             .expect("failed to lock COVERAGE");
         let new_coverage = coverage.len();
         drop(coverage);
+
+        // println!("iter: {}", self.iterations);
 
         if !need_more_data {
             let min_input_size = if let Some(min_input_size) = self.min_input_size {
@@ -166,7 +185,7 @@ impl<R: Rng> Fazi<R> {
 
         let old_coverage = COVERAGE_BEFORE_ITERATION.load(Ordering::Relaxed);
         if old_coverage != new_coverage {
-            eprintln!(
+            println!(
                 "old coverage: {}, new coverage: {}, mutations: {:?}",
                 old_coverage, new_coverage, self.mutations
             );
@@ -230,7 +249,7 @@ impl<R: Rng> Fazi<R> {
         self.iterations += 1;
 
         if self.iterations % 1000 == 0 {
-            eprintln!("iter: {}", self.iterations);
+            println!("iter: {}", self.iterations);
         }
     }
 }

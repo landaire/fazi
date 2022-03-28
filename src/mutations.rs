@@ -5,6 +5,7 @@ use rand::{
     prelude::{Distribution, IteratorRandom, SliceRandom},
     Rng,
 };
+use sha1::digest::typenum::private::IsEqualPrivate;
 
 use crate::{driver::CONSTANTS, Fazi};
 
@@ -67,11 +68,12 @@ impl MutationStrategy {
             MutationStrategy::InsertByte,
             MutationStrategy::InsertRepeatedBytes,
             MutationStrategy::InsertDictionaryValue,
+            MutationStrategy::CopyPart,
         ];
         // Missing:
-        // MutationStrategy::CopyPart,
         // MutationStrategy::CrossOver,
 
+        let mutation_group = MutationGroup::Any;
         match mutation_group {
             MutationGroup::ChangeData => change_data_group.as_slice().choose(rng).unwrap().clone(),
             MutationGroup::ModifySize => modify_size_group.as_slice().choose(rng).unwrap().clone(),
@@ -108,7 +110,7 @@ impl MutationStrategy {
 
 impl<R: Rng> Fazi<R> {
     pub(crate) fn extend_input(&mut self) -> MutationStrategy {
-        self.insert_repeated_bytes()
+        self.insert_repeated_bytes(true)
             .expect("could not extend input");
 
         MutationStrategy::InsertRepeatedBytes
@@ -117,11 +119,12 @@ impl<R: Rng> Fazi<R> {
     pub(crate) fn mutate_input(&mut self) -> MutationStrategy {
         let mut mutation_strategy = MutationStrategy::random(&mut self.rng);
 
+        // println!("before: {:x?}", self.input);
         loop {
             let mutation_result = match mutation_strategy {
                 MutationStrategy::EraseBytes => self.erase_bytes(),
                 MutationStrategy::InsertByte => self.insert_byte(),
-                MutationStrategy::InsertRepeatedBytes => self.insert_repeated_bytes(),
+                MutationStrategy::InsertRepeatedBytes => self.insert_repeated_bytes(false),
                 MutationStrategy::ChangeByte => self.change_byte(),
                 MutationStrategy::ChangeBit => self.change_bit(),
                 MutationStrategy::ShuffleBytes => self.shuffle_bytes(),
@@ -134,7 +137,6 @@ impl<R: Rng> Fazi<R> {
             };
 
             if mutation_result.is_ok() {
-                // println!("Mutation strategy: {:?}", mutation_strategy);
                 // println!("Selected mutation strategy: {:?}", mutation_strategy);
                 break;
             }
@@ -148,6 +150,7 @@ impl<R: Rng> Fazi<R> {
                 MutationStrategy::random_nonfailing_strategy(&mut self.rng)
             };
         }
+        // println!("after: {:x?}", self.input);
 
         mutation_strategy
     }
@@ -159,7 +162,15 @@ impl<R: Rng> Fazi<R> {
         }
 
         let start_index: usize = self.rng.gen_range(0..self.input.len());
-        let end_index: usize = self.rng.gen_range(start_index..self.input.len());
+        let mut end_index: usize = self.rng.gen_range(start_index..self.input.len());
+        if self.input.len() - (end_index - start_index) < self.min_input_size.unwrap_or(0) {
+            // the selected range would make this testcase smaller than our minimum size.
+            end_index = start_index + (self.input.len() - self.min_input_size.unwrap());
+        }
+
+        if end_index - start_index == 0 {
+            return Err(());
+        }
 
         let input = self.input_mut();
         let draining_it = input.drain(start_index..end_index);
@@ -177,6 +188,10 @@ impl<R: Rng> Fazi<R> {
     }
 
     fn insert_byte(&mut self) -> MutationResult {
+        if self.input.len() == self.current_max_mutation_len {
+            return Err(());
+        }
+
         let index: usize = self.rng.gen_range(0..=self.input.len());
         let byte = self.rng.gen();
 
@@ -192,14 +207,24 @@ impl<R: Rng> Fazi<R> {
         Ok(())
     }
 
-    fn insert_repeated_bytes(&mut self) -> MutationResult {
+    fn insert_repeated_bytes(&mut self, ignore_max: bool) -> MutationResult {
+        if !ignore_max && self.input.len() == self.current_max_mutation_len {
+            return Err(());
+        }
+
         let index: usize = if self.input.is_empty() {
             0
         } else {
             self.rng.gen_range(0..=self.input.len())
         };
 
-        let count: usize = self.rng.gen_range(2..128);
+        let max_count = if ignore_max {
+            std::cmp::max(4, self.max_input_size)
+        } else {
+            std::cmp::min(self.max_input_size as usize, 128)
+        };
+
+        let count: usize = self.rng.gen_range(2..max_count);
         let byte = self.rng.gen();
 
         let input = self.input_mut();
@@ -219,38 +244,26 @@ impl<R: Rng> Fazi<R> {
     }
 
     fn insert_dictionary_value(&mut self) -> MutationResult {
-        Err(())
-        // let index: usize = if self.input.is_empty() {
-        //     0
-        // } else {
-        //     self.rng.gen_range(0..=self.input.len())
-        // };
+        if let Some((&offset, &value)) = self.dictionary.u8dict.iter().choose(&mut self.rng) {
+            let offset = if self.input.len() > offset && self.rng.gen() {
+                offset
+            } else {
+                self.rng.gen_range(0..self.input.len())
+            };
 
-        // let constants = CONSTANTS
-        //     .get()
-        //     .expect("CONSTANTS not initialized")
-        //     .lock()
-        //     .expect("failed to lock CONSTANTS");
-        // if constants.binary.is_empty() {
-        //     return Err(());
-        // }
+            let insert_byte = self.rng.gen();
+            let input = self.input_mut();
+            if insert_byte {
+                input.reserve_exact(1);
+                input.insert(offset, value);
+            } else {
+                input[offset] = value;
+            }
 
-        // let bytes = constants
-        //     .binary
-        //     .iter()
-        //     .choose(&mut self.rng)
-        //     .expect("empty binary constants");
-
-        // let input = self.input_mut();
-        // // Reserve the number of bytes necessary
-        // input.reserve_exact(bytes.len());
-
-        // // TODO: optimize. could use a repeating iterator here probably
-        // for &byte in bytes.iter().rev() {
-        //     input.insert(index, byte);
-        // }
-
-        // Ok(())
+            Ok(())
+        } else {
+            return Err(());
+        }
     }
 
     fn change_byte(&mut self) -> MutationResult {
@@ -405,7 +418,7 @@ impl<R: Rng> Fazi<R> {
                 }
             };
         }
-        let constants = CONSTANTS
+        let mut constants = CONSTANTS
             .get()
             .expect("failed to get CONSTANTS")
             .lock()
@@ -432,15 +445,15 @@ impl<R: Rng> Fazi<R> {
                     if let Some(idx) = end
                         .iter()
                         .chain(start.iter())
-                        .position(|&b| b == cmp_pair.0 || b == cmp_pair.1)
+                        .position(|&b| b == cmp_pair.1)
                     {
                         //if let Some(idx) = self.input.iter().position(|&b| b == cmp_pair.0 || b == cmp_pair.1) {
                         let input = self.input_mut();
-                        if input[idx] == cmp_pair.0 {
-                            input[idx] = cmp_pair.1;
-                        } else {
-                            input[idx] = cmp_pair.0;
-                        }
+                        input[idx] = cmp_pair.0;
+                        self.dictionary.u8dict.insert(index, cmp_pair.0);
+
+                        let cmp_pair = cmp_pair.clone();
+                        constants.u8cov.remove(&cmp_pair);
 
                         return Ok(());
                     } else {
@@ -500,8 +513,7 @@ impl<R: Rng> Fazi<R> {
                     continue;
                 }
 
-                let add: $ty = self.rng.gen_range(0..21);
-                let add = add.wrapping_sub(10);
+                let add: $ty = self.rng.gen_range(0..10);
 
                 // The selected index doesn't have enough bytes left for us
                 // to manipulate. We need to adjust the index
@@ -549,8 +561,7 @@ impl<R: Rng> Fazi<R> {
         loop {
             match choice {
                 IntegerWidth::U8 => {
-                    let add: u8 = self.rng.gen_range(0..21);
-                    let add = add.wrapping_sub(10);
+                    let add: u8 = self.rng.gen_range(0..10);
                     let input = self.input_mut();
                     if add == 0 {
                         input[index] = (!input[index]).wrapping_add(1);
@@ -576,6 +587,31 @@ impl<R: Rng> Fazi<R> {
     }
 
     fn copy_part(&mut self) -> MutationResult {
+        if self.input.is_empty() {
+            return Err(());
+        }
+
+        let copy_from = self.rng.gen_range(0..self.input.len());
+        let mut copy_len = self.rng.gen_range(1..=(self.input.len() - copy_from));
+        let copy_to = self.rng.gen_range(0..=self.input.len());
+
+        if self.input.len() + copy_len > self.current_max_mutation_len {
+            let delta = self.current_max_mutation_len.saturating_sub(self.input.len());
+            if delta == 0 {
+                return Err(());
+            }
+
+            copy_len = delta;
+        }
+
+
+        let original_input = Arc::clone(&self.input);
+        let data_to_copy = &original_input[copy_from..(copy_from + copy_len)];
+        let input = self.input_mut();
+        for &byte in data_to_copy.iter().rev() {
+            input.insert(copy_to, byte);
+        }
+
         Ok(())
     }
 

@@ -42,6 +42,8 @@ extern "C" fn main() {
 
     eprintln!("Performing fuzzing");
     loop {
+        fazi.update_max_size();
+
         let res = unsafe {
             f(fazi.input.as_ptr(), fazi.input.len())
         };
