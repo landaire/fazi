@@ -487,7 +487,7 @@ extern "C" fn __sanitizer_weak_hook_strncasecmp(
     n: usize,
     result: std::os::raw::c_int,
 ) {
-    let caller_pc = caller_address!();
+    let caller_pc = caller_pc as usize;
     COVERAGE
         .get()
         .expect("failed to get COVERAGE")
@@ -524,7 +524,7 @@ extern "C" fn __sanitizer_weak_hook_strstr(
     s2: *const std::ffi::c_void,
     result: std::os::raw::c_int,
 ) {
-    let caller_pc = caller_address!();
+    let caller_pc = caller_pc as usize;
     COVERAGE
         .get()
         .expect("failed to get COVERAGE")
@@ -542,7 +542,7 @@ extern "C" fn __sanitizer_weak_hook_strcasestr(
     s2: *const std::ffi::c_void,
     result: std::os::raw::c_int,
 ) {
-    let caller_pc = caller_address!();
+    let caller_pc = caller_pc as usize;
     COVERAGE
         .get()
         .expect("failed to get COVERAGE")
@@ -562,7 +562,7 @@ extern "C" fn __sanitizer_weak_hook_memmem(
     len2: usize,
     result: std::os::raw::c_int,
 ) {
-    let caller_pc = caller_address!();
+    let caller_pc = caller_pc as usize;
     COVERAGE
         .get()
         .expect("failed to get COVERAGE")
