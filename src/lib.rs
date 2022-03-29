@@ -2,7 +2,12 @@
 #![feature(once_cell)]
 #![feature(link_llvm_intrinsics)]
 
-use std::{collections::{BTreeSet, BTreeMap}, fs, path::Path, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    path::Path,
+    sync::Arc,
+};
 
 use crate::options::RuntimeOptions;
 use crate::weak::weak;
@@ -12,11 +17,11 @@ use rand::{distributions::Standard, prelude::*, SeedableRng};
 
 mod coverage;
 mod driver;
+pub mod exports;
 mod mutations;
 mod options;
 mod signal;
 mod weak;
-pub mod exports;
 
 // extern "C" {
 //     #[linkage = "weak"]

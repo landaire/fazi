@@ -50,7 +50,10 @@ pub(crate) struct ExternWeak<F> {
 impl<F> ExternWeak<F> {
     #[inline]
     pub(crate) fn new(weak_ptr: *const libc::c_void) -> Self {
-        ExternWeak { weak_ptr, _marker: PhantomData }
+        ExternWeak {
+            weak_ptr,
+            _marker: PhantomData,
+        }
     }
 }
 
@@ -61,7 +64,9 @@ impl<F> ExternWeak<F> {
             if self.weak_ptr.is_null() {
                 None
             } else {
-                Some(std::mem::transmute_copy::<*const libc::c_void, F>(&self.weak_ptr))
+                Some(std::mem::transmute_copy::<*const libc::c_void, F>(
+                    &self.weak_ptr,
+                ))
             }
         }
     }
@@ -74,7 +79,11 @@ pub(crate) struct DlsymWeak<F> {
 
 impl<F> DlsymWeak<F> {
     pub(crate) const fn new(name: &'static str) -> Self {
-        DlsymWeak { name, addr: AtomicUsize::new(1), _marker: PhantomData }
+        DlsymWeak {
+            name,
+            addr: AtomicUsize::new(1),
+            _marker: PhantomData,
+        }
     }
 
     #[inline]

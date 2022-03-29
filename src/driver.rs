@@ -1,10 +1,13 @@
 use rand::prelude::{SliceRandom, StdRng};
 
-use crate::{coverage::CoverageMap, signal, weak::weak, Fazi, exports::fazi_initialize};
+use crate::{coverage::CoverageMap, exports::fazi_initialize, signal, weak::weak, Fazi};
 use std::{
     collections::{BTreeSet, HashSet},
     lazy::SyncOnceCell,
-    sync::{Arc, Mutex, atomic::{AtomicUsize, AtomicBool}},
+    sync::{
+        atomic::{AtomicBool, AtomicUsize},
+        Arc, Mutex,
+    },
 };
 
 pub(crate) static CONSTANTS: SyncOnceCell<Mutex<CoverageMap>> = SyncOnceCell::new();
@@ -21,7 +24,11 @@ extern "C" fn main() {
 
     fazi_initialize();
 
-    let mut fazi = FAZI.get().expect("FAZI not initialized").lock().expect("could not lock FAZI");
+    let mut fazi = FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
 
     eprintln!("Performing recoverage");
     let f = crate::libfuzzer_runone_fn();
@@ -44,9 +51,7 @@ extern "C" fn main() {
     loop {
         fazi.update_max_size();
 
-        let res = unsafe {
-            f(fazi.input.as_ptr(), fazi.input.len())
-        };
+        let res = unsafe { f(fazi.input.as_ptr(), fazi.input.len()) };
 
         fazi.end_iteration(res != 0);
     }

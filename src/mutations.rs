@@ -596,14 +596,15 @@ impl<R: Rng> Fazi<R> {
         let copy_to = self.rng.gen_range(0..=self.input.len());
 
         if self.input.len() + copy_len > self.current_max_mutation_len {
-            let delta = self.current_max_mutation_len.saturating_sub(self.input.len());
+            let delta = self
+                .current_max_mutation_len
+                .saturating_sub(self.input.len());
             if delta == 0 {
                 return Err(());
             }
 
             copy_len = delta;
         }
-
 
         let original_input = Arc::clone(&self.input);
         let data_to_copy = &original_input[copy_from..(copy_from + copy_len)];

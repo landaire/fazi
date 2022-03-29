@@ -147,12 +147,17 @@ impl<R: Rng> Fazi<R> {
         // Update the max length
         if self.options.len_control > 0 && self.current_max_mutation_len < self.max_input_size {
             let max_mutation_len_f64: f64 = self.max_input_size as f64;
-            let len_control: f64 = self.options.len_control.try_into().expect("failed to convert len_control");
+            let len_control: f64 = self
+                .options
+                .len_control
+                .try_into()
+                .expect("failed to convert len_control");
             let factor = (len_control * max_mutation_len_f64.log10()).trunc() as usize;
             // println!("factor: {}", factor);
             if self.iterations - self.last_corpus_update_run > factor {
                 let max_mutation_len = self.max_input_size;
-                let new_max_mutation_len = max_mutation_len + (max_mutation_len_f64.log10() as usize);
+                let new_max_mutation_len =
+                    max_mutation_len + (max_mutation_len_f64.log10() as usize);
                 self.max_input_size = new_max_mutation_len;
                 // println!("Updating max length from {max_mutation_len} to {new_max_mutation_len}")
             }

@@ -17,7 +17,7 @@ pub(crate) struct RuntimeOptions {
     pub max_mutation_depth: usize,
 
     #[clap(long, default_value = "100")]
-    pub len_control: u32
+    pub len_control: u32,
 }
 
 impl Default for RuntimeOptions {
