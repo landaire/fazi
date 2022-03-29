@@ -6,7 +6,7 @@ use std::{
     },
 };
 
-use rand::{prelude::IteratorRandom, prelude::SliceRandom, Rng};
+use rand::{prelude::IteratorRandom, Rng};
 
 use crate::{
     driver::{CONSTANTS, COVERAGE, COVERAGE_BEFORE_ITERATION, FAZI, FAZI_INITIALIZED, LAST_INPUT}, signal, Fazi,

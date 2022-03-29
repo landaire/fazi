@@ -1,9 +1,4 @@
-use std::{
-    collections::{BTreeSet, HashSet},
-    hash::Hasher,
-};
-
-
+use std::collections::{BTreeSet, HashSet};
 
 use crate::{
     driver::{CONSTANTS, COVERAGE},
