@@ -3,7 +3,7 @@ use std::{
     hash::Hasher,
 };
 
-use sha1::{Digest, Sha1};
+
 
 use crate::{
     driver::{CONSTANTS, COVERAGE},
@@ -41,7 +41,7 @@ impl CoverageMap {
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_cov_trace_pc_guard(guard: *const u32) {
+extern "C" fn __sanitizer_cov_trace_pc_guard(_guard: *const u32) {
     fazi_initialize();
     let caller_pc = caller_address!();
     COVERAGE
@@ -67,14 +67,14 @@ extern "C" fn __sanitizer_cov_trace_pc() {
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_cov_trace_pc_guard_init(start: *const u32, stop: *const u32) {
+extern "C" fn __sanitizer_cov_trace_pc_guard_init(_start: *const u32, _stop: *const u32) {
     fazi_initialize();
     //   fuzzer::WarnAboutDeprecatedInstrumentation(
     //       "-fsanitize-coverage=trace-pc-guard");
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_cov_8bit_counters_init(start: *const u32, stop: *const u32) {
+extern "C" fn __sanitizer_cov_8bit_counters_init(_start: *const u32, _stop: *const u32) {
     fazi_initialize();
     // println!("init");
     // todo!()
@@ -83,8 +83,8 @@ extern "C" fn __sanitizer_cov_8bit_counters_init(start: *const u32, stop: *const
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_pcs_init(
-    pcs_beg: *const std::ffi::c_void,
-    pcs_end: *const std::ffi::c_void,
+    _pcs_beg: *const std::ffi::c_void,
+    _pcs_end: *const std::ffi::c_void,
 ) {
     fazi_initialize();
 
@@ -94,7 +94,7 @@ extern "C" fn __sanitizer_cov_pcs_init(
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_cov_trace_pc_indir(callee: *const std::ffi::c_void) {
+extern "C" fn __sanitizer_cov_trace_pc_indir(_callee: *const std::ffi::c_void) {
     let caller_pc = caller_address!();
     COVERAGE
         .get()
@@ -108,7 +108,7 @@ extern "C" fn __sanitizer_cov_trace_pc_indir(callee: *const std::ffi::c_void) {
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_cov_trace_cmp8(arg1: u64, arg2: u64) {
+extern "C" fn __sanitizer_cov_trace_cmp8(_arg1: u64, _arg2: u64) {
     let caller_pc = caller_address!();
     COVERAGE
         .get()
@@ -177,7 +177,7 @@ extern "C" fn __sanitizer_cov_trace_const_cmp8(arg1: u64, arg2: u64) {
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_cov_trace_cmp4(arg1: u32, arg2: u32) {
+extern "C" fn __sanitizer_cov_trace_cmp4(_arg1: u32, _arg2: u32) {
     let caller_pc = caller_address!();
     COVERAGE
         .get()
@@ -234,7 +234,7 @@ extern "C" fn __sanitizer_cov_trace_const_cmp4(arg1: u32, arg2: u32) {
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_cov_trace_cmp2(arg1: u16, arg2: u16) {
+extern "C" fn __sanitizer_cov_trace_cmp2(_arg1: u16, _arg2: u16) {
     let caller_pc = caller_address!();
     COVERAGE
         .get()
@@ -281,7 +281,7 @@ extern "C" fn __sanitizer_cov_trace_const_cmp2(arg1: u16, arg2: u16) {
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_cov_trace_cmp1(arg1: u8, arg2: u8) {
+extern "C" fn __sanitizer_cov_trace_cmp1(_arg1: u8, _arg2: u8) {
     let caller_pc = caller_address!();
     COVERAGE
         .get()
@@ -318,7 +318,7 @@ extern "C" fn __sanitizer_cov_trace_const_cmp1(arg1: u8, arg2: u8) {
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_cov_trace_switch(val: u64, cases: *const u64) {
+extern "C" fn __sanitizer_cov_trace_switch(_val: u64, _cases: *const u64) {
     //   uint64_t N = Cases[0];
     //   uint64_t ValSizeInBits = Cases[1];
     //   uint64_t *Vals = Cases + 2;
@@ -363,7 +363,7 @@ extern "C" fn __sanitizer_cov_trace_switch(val: u64, cases: *const u64) {
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_cov_trace_div4(val: u32) {
+extern "C" fn __sanitizer_cov_trace_div4(_val: u32) {
     let caller_pc = caller_address!();
     COVERAGE
         .get()
@@ -376,7 +376,7 @@ extern "C" fn __sanitizer_cov_trace_div4(val: u32) {
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_cov_trace_div8(val: u64) {
+extern "C" fn __sanitizer_cov_trace_div8(_val: u64) {
     let caller_pc = caller_address!();
     COVERAGE
         .get()
@@ -389,7 +389,7 @@ extern "C" fn __sanitizer_cov_trace_div8(val: u64) {
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_cov_trace_gep(idx: *const std::ffi::c_void) {
+extern "C" fn __sanitizer_cov_trace_gep(_idx: *const std::ffi::c_void) {
     let caller_pc = caller_address!();
     COVERAGE
         .get()
@@ -441,10 +441,10 @@ extern "C" fn __sanitizer_weak_hook_memcmp(
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_strncmp(
     caller_pc: *const std::ffi::c_void,
-    s1: *const std::ffi::c_void,
-    s2: *const std::ffi::c_void,
-    n: usize,
-    result: std::os::raw::c_int,
+    _s1: *const std::ffi::c_void,
+    _s2: *const std::ffi::c_void,
+    _n: usize,
+    _result: std::os::raw::c_int,
 ) {
     let caller_pc = caller_pc as usize;
     COVERAGE
@@ -482,10 +482,10 @@ extern "C" fn __sanitizer_weak_hook_strcmp(
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_strncasecmp(
     caller_pc: *const std::ffi::c_void,
-    s1: *const std::ffi::c_void,
-    s2: *const std::ffi::c_void,
-    n: usize,
-    result: std::os::raw::c_int,
+    _s1: *const std::ffi::c_void,
+    _s2: *const std::ffi::c_void,
+    _n: usize,
+    _result: std::os::raw::c_int,
 ) {
     let caller_pc = caller_pc as usize;
     COVERAGE
@@ -501,10 +501,10 @@ extern "C" fn __sanitizer_weak_hook_strncasecmp(
 
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_strcasecmp(
-    caller_pc: *const std::ffi::c_void,
-    s1: *const std::ffi::c_void,
-    s2: *const std::ffi::c_void,
-    result: std::os::raw::c_int,
+    _caller_pc: *const std::ffi::c_void,
+    _s1: *const std::ffi::c_void,
+    _s2: *const std::ffi::c_void,
+    _result: std::os::raw::c_int,
 ) {
     let caller_pc = caller_address!();
     COVERAGE
@@ -520,9 +520,9 @@ extern "C" fn __sanitizer_weak_hook_strcasecmp(
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_strstr(
     caller_pc: *const std::ffi::c_void,
-    s1: *const std::ffi::c_void,
-    s2: *const std::ffi::c_void,
-    result: std::os::raw::c_int,
+    _s1: *const std::ffi::c_void,
+    _s2: *const std::ffi::c_void,
+    _result: std::os::raw::c_int,
 ) {
     let caller_pc = caller_pc as usize;
     COVERAGE
@@ -538,9 +538,9 @@ extern "C" fn __sanitizer_weak_hook_strstr(
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_strcasestr(
     caller_pc: *const std::ffi::c_void,
-    s1: *const std::ffi::c_void,
-    s2: *const std::ffi::c_void,
-    result: std::os::raw::c_int,
+    _s1: *const std::ffi::c_void,
+    _s2: *const std::ffi::c_void,
+    _result: std::os::raw::c_int,
 ) {
     let caller_pc = caller_pc as usize;
     COVERAGE
@@ -556,11 +556,11 @@ extern "C" fn __sanitizer_weak_hook_strcasestr(
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_memmem(
     caller_pc: *const std::ffi::c_void,
-    s1: *const std::ffi::c_void,
-    len1: usize,
-    s2: *const std::ffi::c_void,
-    len2: usize,
-    result: std::os::raw::c_int,
+    _s1: *const std::ffi::c_void,
+    _len1: usize,
+    _s2: *const std::ffi::c_void,
+    _len2: usize,
+    _result: std::os::raw::c_int,
 ) {
     let caller_pc = caller_pc as usize;
     COVERAGE

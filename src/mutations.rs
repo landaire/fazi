@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
 use rand::{
-    distributions::WeightedIndex,
-    prelude::{Distribution, IteratorRandom, SliceRandom},
+    prelude::{IteratorRandom, SliceRandom},
     Rng,
 };
-use sha1::digest::typenum::private::IsEqualPrivate;
+
 
 use crate::{driver::CONSTANTS, Fazi};
 
@@ -47,7 +46,7 @@ impl MutationStrategy {
             ModifySize,
             Any,
         }
-        let mutation_group = if rng.gen_bool(0.90) {
+        let _mutation_group = if rng.gen_bool(0.90) {
             MutationGroup::ChangeData
         } else if rng.gen() {
             MutationGroup::ModifySize

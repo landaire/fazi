@@ -3,7 +3,7 @@
 #![feature(link_llvm_intrinsics)]
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap},
     fs,
     path::Path,
     sync::Arc,
@@ -13,7 +13,7 @@ use crate::options::RuntimeOptions;
 use crate::weak::weak;
 use clap::StructOpt;
 use mutations::MutationStrategy;
-use rand::{distributions::Standard, prelude::*, SeedableRng};
+use rand::{prelude::*, SeedableRng};
 
 mod coverage;
 mod driver;
@@ -155,7 +155,7 @@ mod tests {
     #[test]
     fn test_add() {
         let mut fazi = Fazi::default();
-        for i in 0..30 {
+        for _i in 0..30 {
             fazi.mutate_input();
             println!("{:?}", fazi.input);
         }

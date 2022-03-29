@@ -1,7 +1,7 @@
 use std::{
     ffi::CStr,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{Ordering},
         Arc, Mutex,
     },
 };
@@ -9,8 +9,7 @@ use std::{
 use rand::{prelude::IteratorRandom, prelude::SliceRandom, Rng};
 
 use crate::{
-    driver::{CONSTANTS, COVERAGE, COVERAGE_BEFORE_ITERATION, FAZI, FAZI_INITIALIZED, LAST_INPUT},
-    libfuzzer_runone_fn, signal, Fazi,
+    driver::{CONSTANTS, COVERAGE, COVERAGE_BEFORE_ITERATION, FAZI, FAZI_INITIALIZED, LAST_INPUT}, signal, Fazi,
 };
 
 #[repr(C)]
