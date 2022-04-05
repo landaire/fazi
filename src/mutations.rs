@@ -5,7 +5,6 @@ use rand::{
     Rng,
 };
 
-
 use crate::{driver::CONSTANTS, Fazi};
 
 type MutationResult = Result<(), ()>;
@@ -434,6 +433,7 @@ impl<R: Rng> Fazi<R> {
                     let cmp_pair = constants
                         .u8cov
                         .iter()
+                        .filter(|c| c.0.is_dynamic() || c.1.is_dynamic())
                         .choose(&mut self.rng)
                         .expect("u8cov empty?");
 
@@ -441,15 +441,26 @@ impl<R: Rng> Fazi<R> {
                     // at.
                     let start_idx = self.rng.gen_range(0..self.input.len());
                     let (start, end) = self.input.split_at(start_idx);
-                    if let Some(idx) = end
-                        .iter()
-                        .chain(start.iter())
-                        .position(|&b| b == cmp_pair.1)
-                    {
+                    if let Some(idx) = end.iter().chain(start.iter()).position(|&b| {
+                        // We need to select a "dynamic" value since const
+                        // values would have been hardcoded into the target
+                        b == if cmp_pair.0.is_dynamic() {
+                            cmp_pair.0.inner()
+                        } else {
+                            cmp_pair.1.inner()
+                        }
+                    }) {
                         //if let Some(idx) = self.input.iter().position(|&b| b == cmp_pair.0 || b == cmp_pair.1) {
                         let input = self.input_mut();
-                        input[idx] = cmp_pair.0;
-                        self.dictionary.u8dict.insert(index, cmp_pair.0);
+                        let const_value = if cmp_pair.0.is_const() {
+                            cmp_pair.0.inner()
+                        } else {
+                            cmp_pair.1.inner()
+                        };
+
+                        input[idx] = const_value;
+
+                        self.dictionary.u8dict.insert(index, const_value);
 
                         let cmp_pair = cmp_pair.clone();
                         constants.u8cov.remove(&cmp_pair);

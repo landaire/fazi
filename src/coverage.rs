@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashSet};
+use std::{collections::{BTreeSet, HashSet}, hash::Hasher};
 
 use crate::{
     driver::{CONSTANTS, COVERAGE},
@@ -16,12 +16,68 @@ macro_rules! caller_address {
     };
 }
 
+#[derive(Debug, Clone)]
+pub(crate) enum CmpOperand<T: Clone> {
+    /// Represents a constant value in a comparison operation. e.g. if the x86
+    /// assembly is `cmp rax, 10`, we'd want to represent that the right-hand
+    /// side of this instruction was a constant value of 10.
+    Constant(T),
+    /// Represents a constant value in a comparison operation. e.g. if the x86
+    /// assembly is `cmp rax, 10`, where `rax` is 5, we'd want to represent that
+    /// the left-hand side of this instruction is a dynamic value of 5.
+    Dynamic(T),
+}
+
+impl<T: Clone> CmpOperand<T> {
+    pub fn inner(&self) -> T {
+        match self {
+            CmpOperand::Constant(val) => val.clone(),
+            CmpOperand::Dynamic(val) => val.clone(),
+        }
+    }
+
+    pub fn inner_ref(&self) -> &T {
+        match self {
+            CmpOperand::Constant(val) => val,
+            CmpOperand::Dynamic(val) => val,
+        }
+    }
+
+    pub fn is_const(&self) -> bool {
+        matches!(self, CmpOperand::Constant(_))
+    }
+
+    pub fn is_dynamic(&self) -> bool {
+        matches!(self, CmpOperand::Dynamic(_))
+    }
+}
+
+impl<T: Eq + Clone> Eq for CmpOperand<T> {}
+
+impl<T: PartialEq + Clone> PartialEq for CmpOperand<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner_ref() == other.inner_ref()
+    }
+}
+
+impl<T: PartialOrd + Clone> PartialOrd for CmpOperand<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.inner_ref().partial_cmp(other.inner_ref())
+    }
+}
+
+impl<T: Ord + Clone> Ord for CmpOperand<T> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.inner_ref().cmp(other.inner_ref())
+    }
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct CoverageMap {
-    pub u8cov: BTreeSet<(u8, u8)>,
-    pub u16cov: BTreeSet<(u16, u16)>,
-    pub u32cov: BTreeSet<(u32, u32)>,
-    pub u64cov: BTreeSet<(u64, u64)>,
+    pub u8cov: BTreeSet<(CmpOperand<u8>, CmpOperand<u8>)>,
+    pub u16cov: BTreeSet<(CmpOperand<u16>, CmpOperand<u16>)>,
+    pub u32cov: BTreeSet<(CmpOperand<u32>, CmpOperand<u32>)>,
+    pub u64cov: BTreeSet<(CmpOperand<u64>, CmpOperand<u64>)>,
     pub binary: HashSet<(Vec<u8>, Vec<u8>)>,
 }
 
@@ -89,14 +145,25 @@ extern "C" fn __sanitizer_cov_pcs_init(
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_cov_trace_pc_indir(_callee: *const std::ffi::c_void) {
+extern "C" fn __sanitizer_cov_trace_pc_indir(callee: *const std::ffi::c_void) {
+    use std::collections::hash_map::DefaultHasher;
+
     let caller_pc = caller_address!();
-    COVERAGE
+    let mut coverage = COVERAGE
         .get()
         .expect("failed to get COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
-        .insert(caller_pc);
+        .expect("failed to lock COVERAGE");
+
+    let mut s = DefaultHasher::new();
+    s.write_usize(callee as usize);
+    s.write_usize(caller_pc as usize);
+    let hash = s.finish();
+
+    // Insert the caller and callee, then the two combined (edge)
+    coverage.insert(caller_pc);
+    coverage.insert(callee as usize);
+    coverage.insert(hash as usize);
 
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCallerCallee(PC, Callee);
@@ -126,36 +193,36 @@ extern "C" fn __sanitizer_cov_trace_const_cmp8(arg1: u64, arg2: u64) {
 
     if arg1 <= u8::MAX.try_into().unwrap() && arg2 <= u8::MAX.try_into().unwrap() {
         constants.u8cov.insert((
-            arg1.try_into()
-                .expect("cmp8 with argument greater than 8 bits?"),
-            arg2.try_into()
-                .expect("cmp8 with argument greater than 8 bits?"),
+            CmpOperand::Constant(arg1.try_into()
+                .expect("cmp8 with argument greater than 8 bits?")),
+            CmpOperand::Dynamic(arg2.try_into()
+                .expect("cmp8 with argument greater than 8 bits?")),
         ));
     }
 
     if arg1 <= u16::MAX.try_into().unwrap() && arg2 <= u16::MAX.try_into().unwrap() {
         constants.u16cov.insert((
-            arg1.try_into()
-                .expect("cmp8 with argument greater than 8 bits?"),
-            arg2.try_into()
-                .expect("cmp8 with argument greater than 8 bits?"),
+            CmpOperand::Constant(arg1.try_into()
+                .expect("cmp8 with argument greater than 8 bits?")),
+            CmpOperand::Dynamic(arg2.try_into()
+                .expect("cmp8 with argument greater than 8 bits?")),
         ));
     }
 
     if arg1 <= u32::MAX.try_into().unwrap() && arg2 <= u32::MAX.try_into().unwrap() {
         constants.u32cov.insert((
-            arg1.try_into()
-                .expect("cmp8 with argument greater than 8 bits?"),
-            arg2.try_into()
-                .expect("cmp8 with argument greater than 8 bits?"),
+            CmpOperand::Constant(arg1.try_into()
+                .expect("cmp8 with argument greater than 8 bits?")),
+            CmpOperand::Dynamic(arg2.try_into()
+                .expect("cmp8 with argument greater than 8 bits?")),
         ));
     }
 
     constants.u64cov.insert((
-        arg1.try_into()
-            .expect("cmp8 with argument greater than 8 bits?"),
-        arg2.try_into()
-            .expect("cmp8 with argument greater than 8 bits?"),
+        CmpOperand::Constant(arg1.try_into()
+            .expect("cmp8 with argument greater than 8 bits?")),
+        CmpOperand::Dynamic(arg2.try_into()
+            .expect("cmp8 with argument greater than 8 bits?")),
     ));
 
     let caller_pc = caller_address!();
@@ -193,27 +260,27 @@ extern "C" fn __sanitizer_cov_trace_const_cmp4(arg1: u32, arg2: u32) {
 
     if arg1 <= u8::MAX.try_into().unwrap() && arg2 <= u8::MAX.try_into().unwrap() {
         constants.u8cov.insert((
-            arg1.try_into()
-                .expect("cmp8 with argument greater than 8 bits?"),
-            arg2.try_into()
-                .expect("cmp8 with argument greater than 8 bits?"),
+            CmpOperand::Constant(arg1.try_into()
+                .expect("cmp8 with argument greater than 8 bits?")),
+            CmpOperand::Dynamic(arg2.try_into()
+                .expect("cmp8 with argument greater than 8 bits?")),
         ));
     }
 
     if arg1 <= u16::MAX.try_into().unwrap() && arg2 <= u16::MAX.try_into().unwrap() {
         constants.u16cov.insert((
-            arg1.try_into()
-                .expect("cmp8 with argument greater than 8 bits?"),
-            arg2.try_into()
-                .expect("cmp8 with argument greater than 8 bits?"),
+            CmpOperand::Constant(arg1.try_into()
+                .expect("cmp8 with argument greater than 8 bits?")),
+            CmpOperand::Dynamic(arg2.try_into()
+                .expect("cmp8 with argument greater than 8 bits?")),
         ));
     }
 
     constants.u32cov.insert((
-        arg1.try_into()
-            .expect("cmp8 with argument greater than 8 bits?"),
-        arg2.try_into()
-            .expect("cmp8 with argument greater than 8 bits?"),
+        CmpOperand::Constant(arg1.try_into()
+            .expect("cmp8 with argument greater than 8 bits?")),
+        CmpOperand::Dynamic(arg2.try_into()
+            .expect("cmp8 with argument greater than 8 bits?")),
     ));
 
     let caller_pc = caller_address!();
@@ -249,18 +316,18 @@ extern "C" fn __sanitizer_cov_trace_const_cmp2(arg1: u16, arg2: u16) {
 
     if arg1 <= u8::MAX.try_into().unwrap() && arg2 <= u8::MAX.try_into().unwrap() {
         constants.u8cov.insert((
-            arg1.try_into()
-                .expect("cmp8 with argument greater than 8 bits?"),
-            arg2.try_into()
-                .expect("cmp8 with argument greater than 8 bits?"),
+            CmpOperand::Constant(arg1.try_into()
+                .expect("cmp8 with argument greater than 8 bits?")),
+            CmpOperand::Dynamic(arg2.try_into()
+                .expect("cmp8 with argument greater than 8 bits?")),
         ));
     }
 
     constants.u16cov.insert((
-        arg1.try_into()
-            .expect("cmp8 with argument greater than 8 bits?"),
-        arg2.try_into()
-            .expect("cmp8 with argument greater than 8 bits?"),
+        CmpOperand::Constant(arg1.try_into()
+            .expect("cmp8 with argument greater than 8 bits?")),
+        CmpOperand::Dynamic(arg2.try_into()
+            .expect("cmp8 with argument greater than 8 bits?")),
     ));
 
     let caller_pc = caller_address!();
@@ -294,10 +361,10 @@ extern "C" fn __sanitizer_cov_trace_const_cmp1(arg1: u8, arg2: u8) {
     let constants = CONSTANTS.get().expect("constants global not initialized");
     let mut constants = constants.lock().expect("failed to lock CONSTANTS global");
     constants.u8cov.insert((
-        arg1.try_into()
-            .expect("cmp8 with argument greater than 8 bits?"),
-        arg2.try_into()
-            .expect("cmp8 with argument greater than 8 bits?"),
+        CmpOperand::Constant(arg1.try_into()
+            .expect("cmp8 with argument greater than 8 bits?")),
+        CmpOperand::Dynamic(arg2.try_into()
+            .expect("cmp8 with argument greater than 8 bits?")),
     ));
 
     let caller_pc = caller_address!();
