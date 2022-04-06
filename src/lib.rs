@@ -15,6 +15,7 @@ use clap::StructOpt;
 use mutations::MutationStrategy;
 use rand::{prelude::*, SeedableRng};
 
+
 mod coverage;
 mod driver;
 pub mod exports;
@@ -22,6 +23,7 @@ mod mutations;
 mod options;
 mod signal;
 mod weak;
+mod weak_imports;
 
 // extern "C" {
 //     #[linkage = "weak"]
@@ -137,15 +139,6 @@ impl<R: Rng + SeedableRng> Fazi<R> {
 
         self.recoverage_queue = self.corpus.clone();
     }
-}
-
-pub(crate) fn libfuzzer_runone_fn() -> unsafe extern "C" fn(*const u8, usize) -> std::os::raw::c_int
-{
-    weak!(fn LLVMFuzzerTestOneInput(*const u8, usize) -> std::os::raw::c_int);
-
-    LLVMFuzzerTestOneInput
-        .get()
-        .expect("failed to get LLVMFuzzerTestOneInput")
 }
 
 #[cfg(test)]

@@ -22,6 +22,8 @@ pub(crate) static FAZI_INITIALIZED: AtomicBool = AtomicBool::new(false);
 extern "C" fn main() {
     use std::sync::atomic::Ordering;
 
+    use crate::weak_imports::libfuzzer_runone_fn;
+
     fazi_initialize();
 
     let mut fazi = FAZI
@@ -31,7 +33,7 @@ extern "C" fn main() {
         .expect("could not lock FAZI");
 
     eprintln!("Performing recoverage");
-    let f = crate::libfuzzer_runone_fn();
+    let f = libfuzzer_runone_fn();
     for input in fazi.recoverage_queue.drain(..) {
         unsafe {
             f(input.as_ptr(), input.len());
@@ -49,7 +51,7 @@ extern "C" fn main() {
 
     eprintln!("Performing fuzzing");
     loop {
-        fazi.update_max_size();
+        fazi.start_iteration();
 
         let res = unsafe { f(fazi.input.as_ptr(), fazi.input.len()) };
 

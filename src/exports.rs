@@ -9,7 +9,7 @@ use std::{
 use rand::{prelude::IteratorRandom, Rng};
 
 use crate::{
-    driver::{CONSTANTS, COVERAGE, COVERAGE_BEFORE_ITERATION, FAZI, FAZI_INITIALIZED, LAST_INPUT}, signal, Fazi,
+    driver::{CONSTANTS, COVERAGE, COVERAGE_BEFORE_ITERATION, FAZI, FAZI_INITIALIZED, LAST_INPUT}, signal, Fazi, weak_imports::{asan_unpoison_memory_region_fn, msan_poison_memory_region_fn, asan_poison_memory_region_fn, msan_unpoison_memory_region_fn},
 };
 
 #[repr(C)]
@@ -86,11 +86,13 @@ pub extern "C" fn fazi_next_recoverage_testcase() -> FaziInput {
 
 #[no_mangle]
 pub extern "C" fn fazi_start_testcase() -> FaziInput {
-    let fazi = FAZI
+    let mut fazi = FAZI
         .get()
         .expect("FAZI not initialized")
         .lock()
         .expect("could not lock FAZI");
+
+    fazi.start_iteration();
 
     FaziInput {
         data: fazi.input.as_ptr(),
@@ -142,6 +144,11 @@ pub extern "C" fn fazi_set_crashes_dir(dir: *const libc::c_char) {
 }
 
 impl<R: Rng> Fazi<R> {
+    pub(crate) fn start_iteration(&mut self) {
+        self.poison_input();
+        self.update_max_size();
+    }
+
     pub(crate) fn update_max_size(&mut self) {
         // Update the max length
         if self.options.len_control > 0 && self.current_max_mutation_len < self.max_input_size {
@@ -152,19 +159,20 @@ impl<R: Rng> Fazi<R> {
                 .try_into()
                 .expect("failed to convert len_control");
             let factor = (len_control * max_mutation_len_f64.log10()).trunc() as usize;
-            // println!("factor: {}", factor);
             if self.iterations - self.last_corpus_update_run > factor {
                 let max_mutation_len = self.max_input_size;
                 let new_max_mutation_len =
                     max_mutation_len + (max_mutation_len_f64.log10() as usize);
                 self.max_input_size = new_max_mutation_len;
-                // println!("Updating max length from {max_mutation_len} to {new_max_mutation_len}")
             }
         }
 
         self.current_max_mutation_len = std::cmp::max(self.input.len(), self.max_input_size);
     }
+
     pub(crate) fn end_iteration(&mut self, need_more_data: bool) {
+        self.unpoison_input();
+
         let coverage = COVERAGE
             .get()
             .expect("failed to get COVERAGE")
@@ -254,6 +262,43 @@ impl<R: Rng> Fazi<R> {
 
         if self.iterations % 1000 == 0 {
             println!("iter: {}", self.iterations);
+        }
+    }
+
+    /// Marks all bytes of the input buffer's allocated data as addressable
+    pub(crate) fn unpoison_input(&mut self) {
+        let input_ptr = self.input.as_ptr();
+
+        if let Some(asan_unpoison) = asan_unpoison_memory_region_fn() {
+            unsafe {
+                asan_unpoison(input_ptr, self.input.capacity());
+            }
+        }
+
+        if let Some(msan_unpoison) =  msan_unpoison_memory_region_fn() {
+            unsafe {
+                msan_unpoison(input_ptr, self.input.capacity());
+            }
+        }
+    }
+
+
+    /// Marks the difference between the input's buffer's length and capacity as
+    /// unaddressable
+    pub(crate) fn poison_input(&mut self) {
+        let unaddressable_bytes = self.input.capacity() - self.input.len();
+        let unaddressable_start = unsafe { self.input.as_ptr().offset(self.input.len() as isize) };
+
+        if let Some(asan_poison) = asan_poison_memory_region_fn() {
+            unsafe {
+                asan_poison(unaddressable_start, unaddressable_bytes);
+            }
+        }
+
+        if let Some(msan_unpoison) =  msan_poison_memory_region_fn() {
+            unsafe {
+                msan_unpoison(unaddressable_start, unaddressable_bytes);
+            }
         }
     }
 }

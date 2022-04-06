@@ -194,7 +194,6 @@ impl<R: Rng> Fazi<R> {
         let byte = self.rng.gen();
 
         let input = self.input_mut();
-        input.reserve_exact(1);
 
         if index == input.len() {
             input.push(byte);
@@ -227,7 +226,7 @@ impl<R: Rng> Fazi<R> {
 
         let input = self.input_mut();
         // Reserve the number of bytes necessary
-        input.reserve_exact(count);
+        input.reserve(count);
 
         if index == input.len() {
             input.extend(std::iter::repeat(byte).take(count));
@@ -252,7 +251,6 @@ impl<R: Rng> Fazi<R> {
             let insert_byte = self.rng.gen();
             let input = self.input_mut();
             if insert_byte {
-                input.reserve_exact(1);
                 input.insert(offset, value);
             } else {
                 input[offset] = value;
