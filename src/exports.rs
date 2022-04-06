@@ -1,15 +1,18 @@
 use std::{
     ffi::CStr,
-    sync::{
-        atomic::{Ordering},
-        Arc, Mutex,
-    },
+    sync::{atomic::Ordering, Arc, Mutex},
 };
 
 use rand::{prelude::IteratorRandom, Rng};
 
 use crate::{
-    driver::{CONSTANTS, COVERAGE, COVERAGE_BEFORE_ITERATION, FAZI, FAZI_INITIALIZED, LAST_INPUT}, signal, Fazi, weak_imports::{asan_unpoison_memory_region_fn, msan_poison_memory_region_fn, asan_poison_memory_region_fn, msan_unpoison_memory_region_fn},
+    driver::{CONSTANTS, COVERAGE, COVERAGE_BEFORE_ITERATION, FAZI, FAZI_INITIALIZED, LAST_INPUT},
+    signal,
+    weak_imports::{
+        asan_poison_memory_region_fn, asan_unpoison_memory_region_fn, msan_poison_memory_region_fn,
+        msan_unpoison_memory_region_fn,
+    },
+    Fazi,
 };
 
 #[repr(C)]
@@ -275,13 +278,12 @@ impl<R: Rng> Fazi<R> {
             }
         }
 
-        if let Some(msan_unpoison) =  msan_unpoison_memory_region_fn() {
+        if let Some(msan_unpoison) = msan_unpoison_memory_region_fn() {
             unsafe {
                 msan_unpoison(input_ptr, self.input.capacity());
             }
         }
     }
-
 
     /// Marks the difference between the input's buffer's length and capacity as
     /// unaddressable
@@ -295,7 +297,7 @@ impl<R: Rng> Fazi<R> {
             }
         }
 
-        if let Some(msan_unpoison) =  msan_poison_memory_region_fn() {
+        if let Some(msan_unpoison) = msan_poison_memory_region_fn() {
             unsafe {
                 msan_unpoison(unaddressable_start, unaddressable_bytes);
             }

@@ -1,9 +1,6 @@
-use std::{
-    path::{Path},
-    thread,
-};
+use std::{path::Path, thread};
 
-use libc::{SIGABRT};
+use libc::SIGABRT;
 use rand::Rng;
 use sha1::{Digest, Sha1};
 use signal_hook::iterator::Signals;

@@ -1,8 +1,8 @@
-use rand::prelude::{StdRng};
+use rand::prelude::StdRng;
 
 use crate::{coverage::CoverageMap, exports::fazi_initialize, Fazi};
 use std::{
-    collections::{HashSet},
+    collections::HashSet,
     lazy::SyncOnceCell,
     sync::{
         atomic::{AtomicBool, AtomicUsize},

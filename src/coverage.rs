@@ -67,7 +67,7 @@ macro_rules! impl_try_from {
                 }
             }
         }
-    }
+    };
 }
 
 impl_try_from!(u64, u8);
@@ -82,7 +82,6 @@ impl_try_from!(u16, u8);
 impl_try_from!(u8, u16);
 impl_try_from!(u8, u32);
 impl_try_from!(u8, u64);
-
 
 impl<T: Eq + Clone> Eq for CmpOperand<T> {}
 

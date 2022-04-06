@@ -2,19 +2,13 @@
 #![feature(once_cell)]
 #![feature(link_llvm_intrinsics)]
 
-use std::{
-    collections::{BTreeMap},
-    fs,
-    path::Path,
-    sync::Arc,
-};
+use std::{collections::BTreeMap, fs, path::Path, sync::Arc};
 
 use crate::options::RuntimeOptions;
 use crate::weak::weak;
 use clap::StructOpt;
 use mutations::MutationStrategy;
 use rand::{prelude::*, SeedableRng};
-
 
 mod coverage;
 mod dictionary;
