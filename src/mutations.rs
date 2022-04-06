@@ -18,7 +18,7 @@ pub(crate) enum MutationStrategy {
     /// Insert a random byte
     InsertByte,
     /// Insert a random byte N times
-    InsertRepeatedBytes,
+    InsertBytes,
     /// Change a single byte
     ChangeByte,
     /// Change a single bit
@@ -64,7 +64,7 @@ impl MutationStrategy {
         let modify_size_group = [
             MutationStrategy::EraseBytes,
             MutationStrategy::InsertByte,
-            MutationStrategy::InsertRepeatedBytes,
+            MutationStrategy::InsertBytes,
             MutationStrategy::InsertDictionaryValue,
             MutationStrategy::CopyPart,
         ];
@@ -89,7 +89,7 @@ impl MutationStrategy {
     pub fn random_nonfailing_strategy(rng: &mut impl Rng) -> MutationStrategy {
         let options = [
             MutationStrategy::InsertByte,
-            MutationStrategy::InsertRepeatedBytes,
+            MutationStrategy::InsertBytes,
             MutationStrategy::ChangeByte,
             MutationStrategy::ChangeBit,
             MutationStrategy::ShuffleBytes,
@@ -108,10 +108,10 @@ impl MutationStrategy {
 
 impl<R: Rng> Fazi<R> {
     pub(crate) fn extend_input(&mut self) -> MutationStrategy {
-        self.insert_repeated_bytes(true)
+        self.insert_bytes(true)
             .expect("could not extend input");
 
-        MutationStrategy::InsertRepeatedBytes
+        MutationStrategy::InsertBytes
     }
 
     pub(crate) fn mutate_input(&mut self) -> MutationStrategy {
@@ -122,7 +122,7 @@ impl<R: Rng> Fazi<R> {
             let mutation_result = match mutation_strategy {
                 MutationStrategy::EraseBytes => self.erase_bytes(),
                 MutationStrategy::InsertByte => self.insert_byte(),
-                MutationStrategy::InsertRepeatedBytes => self.insert_repeated_bytes(false),
+                MutationStrategy::InsertBytes => self.insert_bytes(false),
                 MutationStrategy::ChangeByte => self.change_byte(),
                 MutationStrategy::ChangeBit => self.change_bit(),
                 MutationStrategy::ShuffleBytes => self.shuffle_bytes(),
@@ -204,7 +204,7 @@ impl<R: Rng> Fazi<R> {
         Ok(())
     }
 
-    fn insert_repeated_bytes(&mut self, ignore_max: bool) -> MutationResult {
+    fn insert_bytes(&mut self, ignore_max: bool) -> MutationResult {
         if !ignore_max && self.input.len() == self.current_max_mutation_len {
             return Err(());
         }
@@ -222,17 +222,23 @@ impl<R: Rng> Fazi<R> {
         };
 
         let count: usize = self.rng.gen_range(2..max_count);
-        let byte = self.rng.gen();
 
-        let input = self.input_mut();
+        let byte_iter: Box<dyn Iterator<Item = u8>> = if self.rng.gen() {
+            Box::new(std::iter::repeat(self.rng.gen()).take(count))
+        } else {
+            Box::new(std::iter::from_fn(|| self.rng.gen()).take(count))
+        };
+
+        let input = Arc::make_mut(&mut self.input);
+
         // Reserve the number of bytes necessary
         input.reserve(count);
 
         if index == input.len() {
-            input.extend(std::iter::repeat(byte).take(count));
+            input.extend(byte_iter);
         } else {
             // TODO: optimize. could use a repeating iterator here probably
-            for _ in 0..count {
+            for byte in byte_iter {
                 input.insert(index, byte);
             }
         }
