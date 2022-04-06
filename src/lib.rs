@@ -17,6 +17,7 @@ use rand::{prelude::*, SeedableRng};
 
 
 mod coverage;
+mod dictionary;
 mod driver;
 pub mod exports;
 mod mutations;

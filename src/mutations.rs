@@ -498,16 +498,35 @@ impl<R: Rng> Fazi<R> {
             U64,
         }
 
+        #[derive(Clone)]
+        enum SubStrategy {
+            InterestingNumber,
+            Add,
+            Replace,
+        }
+
         let mut index = self.rng.gen_range(0..self.input.len());
 
         // We loop until we find an integer width that fits the size of the input
-        let choices = [
+        let integer_width_choices = [
             IntegerWidth::U8,
             IntegerWidth::U16,
             IntegerWidth::U32,
             IntegerWidth::U64,
         ];
-        let mut choice = choices
+        let mut integer_width_choice = integer_width_choices
+            .as_slice()
+            .choose(&mut self.rng)
+            .expect("empty choices?")
+            .clone();
+
+        let sub_strategy_choices = [
+            SubStrategy::InterestingNumber,
+            SubStrategy::Add,
+            SubStrategy::Replace,
+        ];
+
+        let sub_strategy_choice = sub_strategy_choices
             .as_slice()
             .choose(&mut self.rng)
             .expect("empty choices?")
@@ -515,59 +534,72 @@ impl<R: Rng> Fazi<R> {
 
         macro_rules! change_int {
             ($ty:ty, $next_choice:expr) => {
-                let bit_width = std::mem::size_of::<$ty>();
-                if self.input.len() < bit_width {
-                    choice = IntegerWidth::U8;
+                const BIT_WIDTH: usize = std::mem::size_of::<$ty>();
+                if self.input.len() < BIT_WIDTH {
+                    integer_width_choice = IntegerWidth::U8;
                     continue;
                 }
 
-                let add: $ty = self.rng.gen_range(0..10);
-
                 // The selected index doesn't have enough bytes left for us
-                // to manipulate. We need to adjust the index
+                // to manipulate. We need to adjust the index backwards
                 let remaining_bytes = self.input.len() - index;
-                if remaining_bytes < bit_width {
-                    index -= bit_width - remaining_bytes;
+                if remaining_bytes < BIT_WIDTH {
+                    index -= BIT_WIDTH - remaining_bytes;
                 }
 
                 // Treat this as a different endian from the host endian
                 let input = Arc::make_mut(&mut self.input);
-                let input_range = &mut input[index..index + bit_width];
+                let input_range = &mut input[index..index + BIT_WIDTH];
                 let is_different_endianness = self.rng.gen();
-                let mut input_as_int = if is_different_endianness {
-                    <$ty>::from_be_bytes(
-                        input_range
-                            .try_into()
-                            .expect("failed to convert input slice to an array"),
-                    )
-                } else {
-                    <$ty>::from_le_bytes(
-                        input_range
-                            .try_into()
-                            .expect("failed to convert input slice to an array"),
-                    )
-                };
 
-                if add == 0 {
-                    // negate this number
-                    input_as_int = (!input_as_int).wrapping_add(1);
-                } else {
-                    input_as_int = input_as_int.wrapping_add(add);
+                let mut new_bytes = [0u8; BIT_WIDTH];
+
+                match sub_strategy_choice {
+                    SubStrategy::InterestingNumber => crate::dictionary::rand_interesting_number(
+                        &mut self.rng,
+                        BIT_WIDTH,
+                        new_bytes.as_mut_slice(),
+                    ),
+                    SubStrategy::Add => {
+                        let mut input_as_int = if is_different_endianness {
+                            <$ty>::from_be_bytes(
+                                input_range
+                                    .try_into()
+                                    .expect("failed to convert input slice to an array"),
+                            )
+                        } else {
+                            <$ty>::from_le_bytes(
+                                input_range
+                                    .try_into()
+                                    .expect("failed to convert input slice to an array"),
+                            )
+                        };
+                        let add: $ty = self.rng.gen_range(0..10);
+                        if add == 0 {
+                            // negate this number
+                            input_as_int = (!input_as_int).wrapping_add(1);
+                        } else {
+                            input_as_int = input_as_int.wrapping_add(add);
+                        }
+
+                        new_bytes.copy_from_slice(input_as_int.to_ne_bytes().as_slice());
+                    }
+                    SubStrategy::Replace => {
+                        new_bytes = self.rng.gen();
+                    }
                 }
 
-                let new_bytes = if is_different_endianness {
-                    input_as_int.to_be_bytes()
+                if is_different_endianness {
+                    new_bytes.reverse()
                 } else {
-                    input_as_int.to_le_bytes()
-                };
-
-                for (i, &new_byte) in new_bytes.iter().enumerate() {
-                    input_range[i] = new_byte;
+                    new_bytes.reverse()
                 }
+
+                input_range.copy_from_slice(new_bytes.as_slice());
             };
         }
         loop {
-            match choice {
+            match integer_width_choice {
                 IntegerWidth::U8 => {
                     let add: u8 = self.rng.gen_range(0..10);
                     let input = self.input_mut();
