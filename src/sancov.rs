@@ -1,12 +1,20 @@
 use std::{
     collections::{BTreeSet, HashSet},
     hash::Hasher,
+    sync::atomic::AtomicU8,
 };
 
 use crate::{
-    driver::{CONSTANTS, COVERAGE},
+    driver::{CONSTANTS, COVERAGE, PC_INFO, U8_COUNTERS},
     exports::fazi_initialize,
 };
+
+#[derive(Debug)]
+#[repr(C)]
+pub(crate) struct PcEntry {
+    pub pc: usize,
+    pub flags: usize,
+}
 
 extern "C" {
     #[link_name = "llvm.returnaddress"]
@@ -149,30 +157,34 @@ extern "C" fn __sanitizer_cov_trace_pc() {
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_cov_trace_pc_guard_init(_start: *const u32, _stop: *const u32) {
+extern "C" fn __sanitizer_cov_8bit_counters_init(start: *mut u8, stop: *mut u8) {
     fazi_initialize();
-    //   fuzzer::WarnAboutDeprecatedInstrumentation(
-    //       "-fsanitize-coverage=trace-pc-guard");
-}
 
-#[no_mangle]
-extern "C" fn __sanitizer_cov_8bit_counters_init(_start: *const u32, _stop: *const u32) {
-    fazi_initialize();
     // println!("init");
     // todo!()
     //   fuzzer::TPC.HandleInline8bitCountersInit(Start, Stop);
+    unsafe {
+        let counters =
+            std::slice::from_raw_parts(start as *mut AtomicU8, (stop as usize - start as usize));
+        U8_COUNTERS = Some(counters);
+    }
 }
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_pcs_init(
-    _pcs_beg: *const std::ffi::c_void,
-    _pcs_end: *const std::ffi::c_void,
+    pcs_beg: *const std::ffi::c_void,
+    pcs_end: *const std::ffi::c_void,
 ) {
     fazi_initialize();
 
     // println!("{pcs_beg:p}, {pcs_end:p}");
     // todo!()
     //   fuzzer::TPC.HandlePCsInit(pcs_beg, pcs_end);
+    unsafe {
+        let pc_info =
+            std::slice::from_raw_parts(pcs_beg as *const PcEntry, (pcs_end as usize - pcs_beg as usize));
+        PC_INFO = Some(pc_info);
+    }
 }
 
 #[no_mangle]

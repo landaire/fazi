@@ -1,11 +1,11 @@
 use rand::prelude::StdRng;
 
-use crate::{coverage::CoverageMap, exports::fazi_initialize, Fazi};
+use crate::{exports::fazi_initialize, sancov::{CoverageMap, PcEntry}, Fazi};
 use std::{
     collections::HashSet,
     lazy::SyncOnceCell,
     sync::{
-        atomic::{AtomicBool, AtomicUsize},
+        atomic::{AtomicBool, AtomicU8, AtomicUsize},
         Arc, Mutex,
     },
 };
@@ -14,15 +14,16 @@ pub(crate) static CONSTANTS: SyncOnceCell<Mutex<CoverageMap>> = SyncOnceCell::ne
 pub(crate) static COVERAGE: SyncOnceCell<Mutex<HashSet<usize>>> = SyncOnceCell::new();
 pub(crate) static LAST_INPUT: SyncOnceCell<Mutex<Arc<Vec<u8>>>> = SyncOnceCell::new();
 pub(crate) static FAZI: SyncOnceCell<Mutex<Fazi<StdRng>>> = SyncOnceCell::new();
-pub(crate) static COVERAGE_BEFORE_ITERATION: AtomicUsize = AtomicUsize::new(0);
 pub(crate) static FAZI_INITIALIZED: AtomicBool = AtomicBool::new(false);
+pub(crate) static mut U8_COUNTERS: Option<&'static [AtomicU8]> = None;
+pub(crate) static mut PC_INFO: Option<&'static [PcEntry]> = None;
 
 #[cfg(feature = "main_entrypoint")]
 #[no_mangle]
 extern "C" fn main() {
     use std::sync::atomic::Ordering;
 
-    use crate::weak_imports::libfuzzer_runone_fn;
+    use crate::{weak_imports::libfuzzer_runone_fn, exports::update_coverage};
 
     fazi_initialize();
 
@@ -40,14 +41,7 @@ extern "C" fn main() {
         }
     }
 
-    let coverage = COVERAGE
-        .get()
-        .expect("failed to get COVERAGE")
-        .lock()
-        .expect("failed to lock COVERAGE");
-    let new_coverage = coverage.len();
-    COVERAGE_BEFORE_ITERATION.store(new_coverage, Ordering::Relaxed);
-    drop(coverage);
+    update_coverage();
 
     eprintln!("Performing fuzzing");
     loop {

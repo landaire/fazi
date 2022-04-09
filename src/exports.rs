@@ -6,7 +6,10 @@ use std::{
 use rand::{prelude::IteratorRandom, Rng};
 
 use crate::{
-    driver::{CONSTANTS, COVERAGE, COVERAGE_BEFORE_ITERATION, FAZI, FAZI_INITIALIZED, LAST_INPUT},
+    driver::{
+        CONSTANTS, COVERAGE, FAZI, FAZI_INITIALIZED, LAST_INPUT,
+        U8_COUNTERS, PC_INFO,
+    },
     signal,
     weak_imports::{
         asan_poison_memory_region_fn, asan_unpoison_memory_region_fn, msan_poison_memory_region_fn,
@@ -56,13 +59,7 @@ pub extern "C" fn fazi_next_recoverage_testcase() -> FaziInput {
         .lock()
         .expect("could not lock FAZI");
 
-    let coverage = COVERAGE
-        .get()
-        .expect("failed to get COVERAGE")
-        .lock()
-        .expect("failed to lock COVERAGE");
-    let new_coverage = coverage.len();
-    COVERAGE_BEFORE_ITERATION.store(new_coverage, Ordering::Relaxed);
+    update_coverage();
 
     // TODO: lifetime issues if the corpus entries are dropped before the caller
     // finishes using the data. This shouldn't happen because technically the corpus
@@ -176,15 +173,7 @@ impl<R: Rng> Fazi<R> {
     pub(crate) fn end_iteration(&mut self, need_more_data: bool) {
         self.unpoison_input();
 
-        let coverage = COVERAGE
-            .get()
-            .expect("failed to get COVERAGE")
-            .lock()
-            .expect("failed to lock COVERAGE");
-        let new_coverage = coverage.len();
-        drop(coverage);
-
-        // println!("iter: {}", self.iterations);
+        let (new_coverage, old_coverage) = update_coverage();
 
         if !need_more_data {
             let min_input_size = if let Some(min_input_size) = self.min_input_size {
@@ -198,7 +187,6 @@ impl<R: Rng> Fazi<R> {
 
         let can_request_more_data = !self.min_input_size.is_some();
 
-        let old_coverage = COVERAGE_BEFORE_ITERATION.load(Ordering::Relaxed);
         if old_coverage != new_coverage {
             println!(
                 "old coverage: {}, new coverage: {}, mutations: {:?}",
@@ -212,7 +200,6 @@ impl<R: Rng> Fazi<R> {
             std::thread::spawn(move || {
                 signal::save_input(corpus_dir.as_ref(), input.as_slice());
             });
-            COVERAGE_BEFORE_ITERATION.store(new_coverage, Ordering::Relaxed);
 
             self.current_mutation_depth = 0;
             self.mutations.clear();
@@ -303,4 +290,35 @@ impl<R: Rng> Fazi<R> {
             }
         }
     }
+}
+
+pub(crate) fn update_coverage() -> (usize, usize) {
+    let mut coverage = COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE");
+
+    let old_coverage = coverage.len();
+    for (idx, counter) in unsafe { U8_COUNTERS.as_ref().unwrap().iter().enumerate() } {
+        if counter.load(Ordering::Relaxed) >= 1 {
+            // Grab the PC corresponding tot his entry
+            let pc_info = unsafe { &PC_INFO.as_ref().unwrap()[idx] };
+
+            coverage.insert(pc_info.pc);
+        }
+    }
+
+    (coverage.len(), old_coverage)
+}
+
+pub(crate) fn total_cov() -> usize {
+    let coverage = COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE");
+    let new_coverage = coverage.len();
+
+    new_coverage
 }

@@ -10,7 +10,7 @@ use clap::StructOpt;
 use mutations::MutationStrategy;
 use rand::{prelude::*, SeedableRng};
 
-mod coverage;
+mod sancov;
 mod dictionary;
 mod driver;
 pub mod exports;
