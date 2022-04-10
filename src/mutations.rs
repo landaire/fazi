@@ -522,11 +522,7 @@ impl<R: Rng> Fazi<R> {
                     change_int!(u64, u64cov, u64dict, Some(IntegerWidth::U32));
                 }
             }
-
-            break;
         }
-
-        Ok(())
     }
 
     fn change_bin_int(&mut self) -> MutationResult {

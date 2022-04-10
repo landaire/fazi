@@ -34,8 +34,6 @@ pub(crate) static mut PC_INFO: Option<&'static [PcEntry]> = None;
 extern "C" fn main() {
     use clap::StructOpt;
 
-    use crate::weak_imports::libfuzzer_runone_fn;
-
     fazi_initialize();
 
     let mut fazi = FAZI
