@@ -1,14 +1,24 @@
-use rand::{prelude::{StdRng, IteratorRandom}, Rng};
+use rand::{
+    prelude::{IteratorRandom, StdRng},
+    Rng,
+};
 use sha1::{Digest, Sha1};
 
-use crate::{exports::fazi_initialize, sancov::{CoverageMap, PcEntry}, Fazi, options::RuntimeOptions, weak_imports::*};
+use crate::{
+    exports::fazi_initialize,
+    options::RuntimeOptions,
+    sancov::{CoverageMap, PcEntry},
+    weak_imports::*,
+    Fazi,
+};
 use std::{
     collections::HashSet,
     lazy::SyncOnceCell,
+    path::Path,
     sync::{
         atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering},
         Arc, Mutex,
-    }, path::Path,
+    },
 };
 
 pub(crate) static CONSTANTS: SyncOnceCell<Mutex<CoverageMap>> = SyncOnceCell::new();
@@ -22,10 +32,9 @@ pub(crate) static mut PC_INFO: Option<&'static [PcEntry]> = None;
 #[cfg(feature = "main_entrypoint")]
 #[no_mangle]
 extern "C" fn main() {
-
     use clap::StructOpt;
 
-    use crate::{weak_imports::libfuzzer_runone_fn};
+    use crate::weak_imports::libfuzzer_runone_fn;
 
     fazi_initialize();
 

@@ -5,7 +5,10 @@ use rand::Rng;
 use sha1::{Digest, Sha1};
 use signal_hook::iterator::Signals;
 
-use crate::{driver::{LAST_INPUT, handle_crash, save_input}, Fazi};
+use crate::{
+    driver::{handle_crash, save_input, LAST_INPUT},
+    Fazi,
+};
 
 impl<R: Rng> Fazi<R> {
     pub(crate) fn setup_signal_handler(&self) {

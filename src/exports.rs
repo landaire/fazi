@@ -7,8 +7,8 @@ use rand::{prelude::IteratorRandom, Rng};
 
 use crate::{
     driver::{
-        CONSTANTS, COVERAGE, FAZI, FAZI_INITIALIZED, LAST_INPUT,
-        U8_COUNTERS, PC_INFO, update_coverage,
+        update_coverage, CONSTANTS, COVERAGE, FAZI, FAZI_INITIALIZED, LAST_INPUT, PC_INFO,
+        U8_COUNTERS,
     },
     signal,
     weak_imports::{

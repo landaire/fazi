@@ -181,8 +181,10 @@ extern "C" fn __sanitizer_cov_pcs_init(
     // todo!()
     //   fuzzer::TPC.HandlePCsInit(pcs_beg, pcs_end);
     unsafe {
-        let pc_info =
-            std::slice::from_raw_parts(pcs_beg as *const PcEntry, (pcs_end as usize - pcs_beg as usize));
+        let pc_info = std::slice::from_raw_parts(
+            pcs_beg as *const PcEntry,
+            (pcs_end as usize - pcs_beg as usize),
+        );
         PC_INFO = Some(pc_info);
     }
 }

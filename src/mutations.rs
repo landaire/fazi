@@ -108,8 +108,7 @@ impl MutationStrategy {
 
 impl<R: Rng> Fazi<R> {
     pub(crate) fn extend_input(&mut self) -> MutationStrategy {
-        self.insert_bytes(true)
-            .expect("could not extend input");
+        self.insert_bytes(true).expect("could not extend input");
 
         MutationStrategy::InsertBytes
     }
