@@ -6,7 +6,7 @@ const CRASHES_DEFAULT_DIR: &'static str = "./crashes";
 const CORPUS_DEFAULT_DIR: &'static str = "./corpus";
 
 #[derive(Parser, Debug)]
-pub(crate) struct RuntimeOptions {
+pub struct RuntimeOptions {
     #[clap(long,  default_value = CORPUS_DEFAULT_DIR)]
     pub corpus_dir: PathBuf,
 
@@ -18,6 +18,9 @@ pub(crate) struct RuntimeOptions {
 
     #[clap(long, default_value = "100")]
     pub len_control: u32,
+
+    #[clap(long)]
+    pub seed: Option<u64>,
 }
 
 impl Default for RuntimeOptions {
@@ -27,6 +30,7 @@ impl Default for RuntimeOptions {
             crashes_dir: CRASHES_DEFAULT_DIR.into(),
             max_mutation_depth: 15,
             len_control: 100,
+            seed: None,
         }
     }
 }

@@ -1,6 +1,6 @@
 use rand::prelude::StdRng;
 
-use crate::{exports::fazi_initialize, sancov::{CoverageMap, PcEntry}, Fazi};
+use crate::{exports::fazi_initialize, sancov::{CoverageMap, PcEntry}, Fazi, options::RuntimeOptions};
 use std::{
     collections::HashSet,
     lazy::SyncOnceCell,
@@ -23,6 +23,8 @@ pub(crate) static mut PC_INFO: Option<&'static [PcEntry]> = None;
 extern "C" fn main() {
     use std::sync::atomic::Ordering;
 
+    use clap::StructOpt;
+
     use crate::{weak_imports::libfuzzer_runone_fn, exports::update_coverage};
 
     fazi_initialize();
@@ -32,6 +34,8 @@ extern "C" fn main() {
         .expect("FAZI not initialized")
         .lock()
         .expect("could not lock FAZI");
+
+    fazi.set_options(RuntimeOptions::parse());
 
     eprintln!("Performing recoverage");
     let f = libfuzzer_runone_fn();

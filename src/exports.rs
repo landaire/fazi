@@ -301,7 +301,7 @@ pub(crate) fn update_coverage() -> (usize, usize) {
 
     let old_coverage = coverage.len();
     for (idx, counter) in unsafe { U8_COUNTERS.as_ref().unwrap().iter().enumerate() } {
-        if counter.load(Ordering::Relaxed) >= 1 {
+        if counter.load(Ordering::Relaxed) > 0 {
             // Grab the PC corresponding tot his entry
             let pc_info = unsafe { &PC_INFO.as_ref().unwrap()[idx] };
 

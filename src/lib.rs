@@ -9,13 +9,14 @@ use crate::weak::weak;
 use clap::StructOpt;
 use mutations::MutationStrategy;
 use rand::{prelude::*, SeedableRng};
+use sha2::{Digest, Sha256};
 
-mod sancov;
 mod dictionary;
 mod driver;
 pub mod exports;
 mod mutations;
 mod options;
+mod sancov;
 mod signal;
 mod weak;
 mod weak_imports;
@@ -70,6 +71,23 @@ impl Default for Fazi<StdRng> {
     }
 }
 
+impl Fazi<StdRng> {
+    pub fn set_options(&mut self, options: RuntimeOptions) {
+        if let Some(seed) = options.seed {
+            let mut hasher = Sha256::new();
+            hasher.update(seed.to_be_bytes());
+            let result = hasher.finalize();
+            self.rng = StdRng::from_seed(
+                result
+                    .try_into()
+                    .expect("failed to convert seed hash input to 32-byte array"),
+            )
+        }
+
+        self.options = options;
+    }
+}
+
 impl<R: Rng + SeedableRng> Fazi<R> {
     pub fn new() -> Self {
         Fazi {
@@ -105,10 +123,6 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             last_corpus_update_run: 0,
             current_max_mutation_len: 0,
         }
-    }
-
-    pub fn options_from_os_args(&mut self) {
-        self.options = RuntimeOptions::parse();
     }
 
     pub fn restore_inputs(&mut self) {
