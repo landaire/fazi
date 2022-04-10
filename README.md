@@ -2,6 +2,44 @@
 
 A reimplementation of libfuzzer in Rust
 
+## Usage
+
+
+Step 1: Build fazi:
+
+```bash
+$ cargo build --release
+```
+
+Step 2: Build your harness:
+
+```bash
+$ clang ./main.c -fsanitize=fuzzer-no-link -fsanitize=address -lfazi -L$FAZI_DIR/target/release/
+```
+
+Step 3: Run the harness:
+
+```bash
+$ ./a.out
+```
+
+You can list command-line options with the `--help` flag:
+
+```
+fazi
+
+USAGE:
+    a.out [OPTIONS]
+
+OPTIONS:
+        --corpus-dir <CORPUS_DIR>                    [default: ./corpus]
+        --crashes-dir <CRASHES_DIR>                  [default: ./crashes]
+    -h, --help                                       Print help information
+        --len-control <LEN_CONTROL>                  [default: 100]
+        --max-mutation-depth <MAX_MUTATION_DEPTH>    [default: 15]
+        --seed <SEED>
+```
+
 ## Why
 
 While libfuzzer can be used as a library, engaging with it from some environments may be difficult to setup. Fazi provides
