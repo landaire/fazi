@@ -3,12 +3,8 @@ use std::{
     sync::{atomic::Ordering, Mutex},
 };
 
-
-
 use crate::{
-    driver::{
-        update_coverage, CONSTANTS, COVERAGE, FAZI, FAZI_INITIALIZED, LAST_INPUT,
-    },
+    driver::{update_coverage, CONSTANTS, COVERAGE, FAZI, FAZI_INITIALIZED, LAST_INPUT},
     Fazi,
 };
 
@@ -46,7 +42,7 @@ pub extern "C" fn fazi_initialize() {
 }
 
 #[no_mangle]
-pub extern "C" fn fazi_next_recoverage_testcase() -> FaziInput {
+pub extern "C" fn fazi_next_recoverage_testcase(data: *mut *const u8, len: *mut usize) {
     let mut fazi = FAZI
         .get()
         .expect("FAZI not initialized")
@@ -59,14 +55,14 @@ pub extern "C" fn fazi_next_recoverage_testcase() -> FaziInput {
     // finishes using the data. This shouldn't happen because technically the corpus
     // entires are "static" (i.e. lifetime of the fazi object)
     if let Some(input) = fazi.recoverage_queue.pop() {
-        FaziInput {
-            data: input.as_ptr(),
-            size: input.len(),
+        unsafe {
+            data.write(input.as_ptr());
+            len.write(input.len());
         }
     } else {
-        FaziInput {
-            data: std::ptr::null(),
-            size: 0,
+        unsafe {
+            data.write(std::ptr::null_mut());
+            len.write(0);
         }
     }
 
@@ -79,7 +75,7 @@ pub extern "C" fn fazi_next_recoverage_testcase() -> FaziInput {
 }
 
 #[no_mangle]
-pub extern "C" fn fazi_start_testcase() -> FaziInput {
+pub extern "C" fn fazi_start_iteration(data: *mut *const u8, len: *mut usize) {
     let mut fazi = FAZI
         .get()
         .expect("FAZI not initialized")
@@ -88,20 +84,14 @@ pub extern "C" fn fazi_start_testcase() -> FaziInput {
 
     fazi.start_iteration();
 
-    FaziInput {
-        data: fazi.input.as_ptr(),
-        size: fazi.input.len(),
+    unsafe {
+        data.write(fazi.input.as_ptr());
+        len.write(fazi.input.len());
     }
-    // .next_iteration(|input| {
-    //     let f = libfuzzer_runone_fn();
-    //     unsafe {
-    //         f(input.as_ptr(), input.len());
-    //     }
-    // })
 }
 
 #[no_mangle]
-pub extern "C" fn fazi_end_testcase(need_more_data: bool) {
+pub extern "C" fn fazi_end_iteration(need_more_data: bool) {
     let mut fazi = FAZI
         .get()
         .expect("FAZI not initialized")

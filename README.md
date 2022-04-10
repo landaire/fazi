@@ -66,13 +66,8 @@ This model is difficult when integrating into an application with a lot of state
 the JVM. Instead of providing a callback, Fazi lets you just ask it for data and tell it when the testcase is done:
 
 ```c
-typedef struct _fazi_input {
-    const uint8_t *data;
-    size_t len;
-} FaziInput;
-
-extern "C" FaziInput fazi_start_testcase();
-extern "C" void fazi_end_testcase(bool);
+extern "C" void fazi_start_iteration(char** data, size_t* size);
+extern "C" void fazi_end_iteration(bool need_more_data);
 extern "C" void fazi_initialize();
 extern "C" void fazi_set_corpus_dir(const char*);
 extern "C" void fazi_set_crashes_dir(const char*);
@@ -82,11 +77,13 @@ int main() {
     fazi_initialize();
 
     while (true) {
-        FaziInput input = fazi_start_testcase();
+        const char* data = nullptr;
+        size_t size = 0;
+        FaziInput input = fazi_start_iteration(&data, &size);
 
         bool need_more_data = some_api(input.data, input.len);
 
-        fazi_end_testcase(need_more_data);
+        fazi_end_iteration(need_more_data);
     }
 }
 ```
