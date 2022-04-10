@@ -107,12 +107,14 @@ impl MutationStrategy {
 }
 
 impl<R: Rng> Fazi<R> {
+    /// Selects a strategy that will extend the input
     pub(crate) fn extend_input(&mut self) -> MutationStrategy {
         self.insert_bytes(true).expect("could not extend input");
 
         MutationStrategy::InsertBytes
     }
 
+    /// Perform a random mutation strategy on the current input
     pub(crate) fn mutate_input(&mut self) -> MutationStrategy {
         let mut mutation_strategy = MutationStrategy::random(&mut self.rng);
 
@@ -152,6 +154,7 @@ impl<R: Rng> Fazi<R> {
         mutation_strategy
     }
 
+    /// Select a random index and length to remove input bytes from
     fn erase_bytes(&mut self) -> MutationResult {
         // We don't have enough data to perform this mutation
         if self.input.is_empty() {
@@ -184,6 +187,7 @@ impl<R: Rng> Fazi<R> {
         Ok(())
     }
 
+    /// Inserts a single random byte in the input
     fn insert_byte(&mut self) -> MutationResult {
         if self.input.len() == self.current_max_mutation_len {
             return Err(());
@@ -203,6 +207,8 @@ impl<R: Rng> Fazi<R> {
         Ok(())
     }
 
+    /// Inserts multiple random bytes in the input. These bytes may be
+    /// repeated or all random.
     fn insert_bytes(&mut self, ignore_max: bool) -> MutationResult {
         if !ignore_max && self.input.len() == self.current_max_mutation_len {
             return Err(());
@@ -245,6 +251,7 @@ impl<R: Rng> Fazi<R> {
         Ok(())
     }
 
+    /// Grabs a dictionary entry and applies it to the current input.
     fn insert_dictionary_value(&mut self) -> MutationResult {
         #[derive(Clone)]
         enum IntegerWidth {
@@ -317,6 +324,7 @@ impl<R: Rng> Fazi<R> {
         }
     }
 
+    /// Selects a random byte index and sets it to a random byte>
     fn change_byte(&mut self) -> MutationResult {
         if self.input.is_empty() {
             return Err(());
@@ -331,6 +339,7 @@ impl<R: Rng> Fazi<R> {
         Ok(())
     }
 
+    /// Toggles a random bit in the input
     fn change_bit(&mut self) -> MutationResult {
         if self.input.is_empty() {
             return Err(());
@@ -345,6 +354,8 @@ impl<R: Rng> Fazi<R> {
         Ok(())
     }
 
+    /// Selects a byte range from the current input and shuffles the
+    /// bytes around.
     fn shuffle_bytes(&mut self) -> MutationResult {
         // We need at least 2 bytes to shuffle
         if self.input.len() <= 1 {
@@ -363,6 +374,8 @@ impl<R: Rng> Fazi<R> {
         Ok(())
     }
 
+    /// Tries to find an ASCII int in the current input and changes it to a
+    /// different ASCII int.
     fn change_ascii_int(&mut self) -> MutationResult {
         if self.input.is_empty() {
             return Err(());
@@ -385,6 +398,14 @@ impl<R: Rng> Fazi<R> {
         Ok(())
     }
 
+    /// Uses a value from the [`COMPARISON_OPERANDS`] generated via SanCov
+    /// instrumentation and attempts to:
+    /// 1. Find the position of the non-const operand in the current input
+    /// 2. If a position is found, insert a new dictionary entry with that
+    /// position's index and comparison operand
+    /// 3. Replace the integer at that offset with the comparison operand. The
+    /// integer width is either 64, 32, 16, or 8 bits depending on how large
+    /// the comparison operands were.
     fn use_value_from_cmp_instruction(&mut self) -> MutationResult {
         if self.input.is_empty() {
             return Err(());
@@ -525,6 +546,8 @@ impl<R: Rng> Fazi<R> {
         }
     }
 
+    /// Selects a random integer size, selects a random integer index, and
+    /// generates a new integer of the appropriate width.
     fn change_bin_int(&mut self) -> MutationResult {
         if self.input.is_empty() {
             return Err(());
@@ -666,6 +689,7 @@ impl<R: Rng> Fazi<R> {
         Ok(())
     }
 
+    /// Copy part of the input to another position in the current input.
     fn copy_part(&mut self) -> MutationResult {
         if self.input.is_empty() {
             return Err(());
@@ -696,8 +720,9 @@ impl<R: Rng> Fazi<R> {
         Ok(())
     }
 
+    /// Copy part of a different input into this one.
     fn cross_over(&mut self) -> MutationResult {
-        Ok(())
+        Err(())
     }
 
     fn input_mut(&mut self) -> &mut Vec<u8> {
