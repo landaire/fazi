@@ -293,7 +293,7 @@ impl<R: Rng> Fazi<R> {
                             input.insert(offset, b);
                         }
                     } else {
-                        input[offset..offset+ty_size].copy_from_slice(new_value.as_slice());
+                        input[offset..offset + ty_size].copy_from_slice(new_value.as_slice());
                     }
 
                     return Ok(());

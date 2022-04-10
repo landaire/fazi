@@ -1,8 +1,8 @@
-use std::{thread};
+use std::thread;
 
 use libc::SIGABRT;
 use rand::Rng;
-use sha1::{Digest};
+use sha1::Digest;
 use signal_hook::iterator::Signals;
 
 use crate::{
