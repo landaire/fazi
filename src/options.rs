@@ -1,9 +1,17 @@
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 
 const CRASHES_DEFAULT_DIR: &'static str = "./crashes";
 const CORPUS_DEFAULT_DIR: &'static str = "./corpus";
+
+#[derive(Debug, Subcommand)]
+pub enum Command {
+    /// Reproduce some crash
+    Repro {
+        file_path: PathBuf,
+    },
+}
 
 #[derive(Parser, Debug)]
 pub struct RuntimeOptions {
@@ -21,6 +29,9 @@ pub struct RuntimeOptions {
 
     #[clap(long)]
     pub seed: Option<u64>,
+
+    #[clap(subcommand)]
+    pub command: Option<Command>,
 }
 
 impl Default for RuntimeOptions {
@@ -31,6 +42,7 @@ impl Default for RuntimeOptions {
             max_mutation_depth: 15,
             len_control: 100,
             seed: None,
+            command: None,
         }
     }
 }

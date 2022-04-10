@@ -11,6 +11,7 @@ use crate::{
     weak_imports::*,
     Fazi,
 };
+use std::io;
 use std::{
     collections::HashSet,
     lazy::SyncOnceCell,
@@ -20,6 +21,10 @@ use std::{
         Arc, Mutex,
     },
 };
+
+use clap::StructOpt;
+
+use crate::options::Command;
 
 /// Global map of comparison operands from SanCov instrumentation
 pub(crate) static COMPARISON_OPERANDS: SyncOnceCell<Mutex<CoverageMap>> = SyncOnceCell::new();
@@ -39,9 +44,7 @@ pub(crate) static mut PC_INFO: Option<&'static [PcEntry]> = None;
 
 #[cfg(feature = "main_entrypoint")]
 #[no_mangle]
-extern "C" fn main() {
-    use clap::StructOpt;
-
+extern "C" fn main() -> io::Result<()> {
     fazi_initialize();
 
     let mut fazi = FAZI
@@ -51,16 +54,30 @@ extern "C" fn main() {
         .expect("could not lock FAZI");
 
     fazi.set_options(RuntimeOptions::parse());
-
-    eprintln!("Performing recoverage");
     let f = libfuzzer_runone_fn();
-    for input in fazi.recoverage_queue.drain(..) {
-        unsafe {
-            f(input.as_ptr(), input.len());
+
+    match fazi.options.command.as_ref() {
+        Some(Command::Repro { file_path }) => {
+            eprintln!("Reproducing crash: {:?}", file_path);
+            fazi.input = Arc::new(std::fs::read(file_path)?);
+            fazi.start_iteration();
+
+            unsafe { f(fazi.input.as_ptr(), fazi.input.len()) };
+
+            eprintln!("Input did not reproduce crash!");
+            return Ok(());
+        }
+        None => {
+            eprintln!("Performing recoverage");
+            for input in fazi.recoverage_queue.drain(..) {
+                unsafe {
+                    f(input.as_ptr(), input.len());
+                }
+            }
+
+            update_coverage();
         }
     }
-
-    update_coverage();
 
     eprintln!("Performing fuzzing");
     loop {
