@@ -16,7 +16,7 @@ use std::{
     lazy::SyncOnceCell,
     path::Path,
     sync::{
-        atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU8, Ordering},
         Arc, Mutex,
     },
 };

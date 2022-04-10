@@ -165,7 +165,7 @@ extern "C" fn __sanitizer_cov_8bit_counters_init(start: *mut u8, stop: *mut u8) 
     //   fuzzer::TPC.HandleInline8bitCountersInit(Start, Stop);
     unsafe {
         let counters =
-            std::slice::from_raw_parts(start as *mut AtomicU8, (stop as usize - start as usize));
+            std::slice::from_raw_parts(start as *mut AtomicU8, stop as usize - start as usize);
         U8_COUNTERS = Some(counters);
     }
 }
@@ -183,7 +183,7 @@ extern "C" fn __sanitizer_cov_pcs_init(
     unsafe {
         let pc_info = std::slice::from_raw_parts(
             pcs_beg as *const PcEntry,
-            (pcs_end as usize - pcs_beg as usize),
+            pcs_end as usize - pcs_beg as usize,
         );
         PC_INFO = Some(pc_info);
     }

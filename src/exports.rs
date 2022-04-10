@@ -1,19 +1,13 @@
 use std::{
     ffi::CStr,
-    sync::{atomic::Ordering, Arc, Mutex},
+    sync::{atomic::Ordering, Mutex},
 };
 
-use rand::{prelude::IteratorRandom, Rng};
+
 
 use crate::{
     driver::{
-        update_coverage, CONSTANTS, COVERAGE, FAZI, FAZI_INITIALIZED, LAST_INPUT, PC_INFO,
-        U8_COUNTERS,
-    },
-    signal,
-    weak_imports::{
-        asan_poison_memory_region_fn, asan_unpoison_memory_region_fn, msan_poison_memory_region_fn,
-        msan_unpoison_memory_region_fn,
+        update_coverage, CONSTANTS, COVERAGE, FAZI, FAZI_INITIALIZED, LAST_INPUT,
     },
     Fazi,
 };

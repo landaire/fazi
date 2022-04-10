@@ -5,8 +5,8 @@
 use std::{collections::BTreeMap, fs, path::Path, sync::Arc};
 
 use crate::options::RuntimeOptions;
-use crate::weak::weak;
-use clap::StructOpt;
+
+
 use mutations::MutationStrategy;
 use rand::{prelude::*, SeedableRng};
 use sha2::{Digest, Sha256};
