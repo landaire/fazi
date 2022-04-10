@@ -246,24 +246,74 @@ impl<R: Rng> Fazi<R> {
     }
 
     fn insert_dictionary_value(&mut self) -> MutationResult {
-        if let Some((&offset, &value)) = self.dictionary.u8dict.iter().choose(&mut self.rng) {
-            let offset = if self.input.len() > offset && self.rng.gen() {
-                offset
-            } else {
-                self.rng.gen_range(0..self.input.len())
+        #[derive(Clone)]
+        enum IntegerWidth {
+            U8,
+            U16,
+            U32,
+            U64,
+        }
+
+        // We loop until we find an integer width that fits the size of the input
+        let choices = [
+            IntegerWidth::U8,
+            IntegerWidth::U16,
+            IntegerWidth::U32,
+            IntegerWidth::U64,
+        ];
+        let mut choice = choices
+            .as_slice()
+            .choose(&mut self.rng)
+            .expect("empty choices?")
+            .clone();
+        macro_rules! insert_dict {
+            ($ty:ty, $dictmap:ident, $next_choice:expr) => {
+                if let Some((&offset, &value)) =
+                    self.dictionary.$dictmap.iter().choose(&mut self.rng)
+                {
+                    let input_len = self.input.len();
+                    let ty_size = std::mem::size_of::<$ty>();
+                    let is_big_endian_input = self.rng.gen();
+                    let offset = if self.input.len() > offset && self.rng.gen() {
+                        offset
+                    } else {
+                        self.rng.gen_range(0..self.input.len())
+                    };
+
+                    let insert_byte = self.rng.gen();
+                    let input = self.input_mut();
+                    let new_value = if is_big_endian_input {
+                        value.to_be_bytes()
+                    } else {
+                        value.to_le_bytes()
+                    };
+
+                    if insert_byte || offset + ty_size > input_len {
+                        for &b in new_value.iter().rev() {
+                            input.insert(offset, b);
+                        }
+                    } else {
+                        input[offset..offset+ty_size].copy_from_slice(new_value.as_slice());
+                    }
+
+                    return Ok(());
+                } else {
+                    if let Some(next) = $next_choice {
+                        choice = next;
+                        continue;
+                    } else {
+                        return Err(());
+                    }
+                }
             };
-
-            let insert_byte = self.rng.gen();
-            let input = self.input_mut();
-            if insert_byte {
-                input.insert(offset, value);
-            } else {
-                input[offset] = value;
+        }
+        loop {
+            match choice {
+                IntegerWidth::U8 => insert_dict!(u8, u8dict, None),
+                IntegerWidth::U16 => insert_dict!(u16, u16dict, Some(IntegerWidth::U8)),
+                IntegerWidth::U32 => insert_dict!(u32, u32dict, Some(IntegerWidth::U16)),
+                IntegerWidth::U64 => insert_dict!(u64, u64dict, Some(IntegerWidth::U32)),
             }
-
-            Ok(())
-        } else {
-            return Err(());
         }
     }
 
@@ -348,8 +398,6 @@ impl<R: Rng> Fazi<R> {
             U64,
         }
 
-        let mut index = self.rng.gen_range(0..self.input.len());
-
         // We loop until we find an integer width that fits the size of the input
         let choices = [
             IntegerWidth::U8,
@@ -363,124 +411,115 @@ impl<R: Rng> Fazi<R> {
             .expect("empty choices?")
             .clone();
 
-        choice = IntegerWidth::U8;
-
-        macro_rules! change_int {
-            ($ty:ty, $next_choice:expr) => {
-                let bit_width = std::mem::size_of::<$ty>();
-                if self.input.len() < bit_width {
-                    choice = IntegerWidth::U8;
-                    continue;
-                }
-
-                let add: $ty = self.rng.gen_range(0..21);
-                let add = add.wrapping_sub(10);
-
-                // The selected index doesn't have enough bytes left for us
-                // to manipulate. We need to adjust the index
-                let remaining_bytes = self.input.len() - index;
-                if remaining_bytes < bit_width {
-                    index -= bit_width - remaining_bytes;
-                }
-
-                // Treat this as a different endian from the host endian
-                let input = Arc::make_mut(&mut self.input);
-                let input_range = &mut input[index..index + bit_width];
-                let is_different_endianness = self.rng.gen();
-                let mut input_as_int = if is_different_endianness {
-                    <$ty>::from_be_bytes(
-                        input_range
-                            .try_into()
-                            .expect("failed to convert input slice to an array"),
-                    )
-                } else {
-                    <$ty>::from_le_bytes(
-                        input_range
-                            .try_into()
-                            .expect("failed to convert input slice to an array"),
-                    )
-                };
-
-                if add == 0 {
-                    // negate this number
-                    input_as_int = (!input_as_int).wrapping_add(1);
-                } else {
-                    input_as_int = input_as_int.wrapping_add(add);
-                }
-
-                let new_bytes = if is_different_endianness {
-                    input_as_int.to_be_bytes()
-                } else {
-                    input_as_int.to_le_bytes()
-                };
-
-                for (i, &new_byte) in new_bytes.iter().enumerate() {
-                    input_range[i] = new_byte;
-                }
-            };
-        }
         let mut constants = CONSTANTS
             .get()
             .expect("failed to get CONSTANTS")
             .lock()
             .expect("failed to lock CONSTANTS");
-        loop {
-            match choice {
-                IntegerWidth::U8 => {
-                    if constants.u8cov.is_empty() {
+
+        macro_rules! change_int {
+            ($ty:ty, $covmap:ident, $dictmap:ident, $next_choice:expr) => {
+                let ty_size = std::mem::size_of::<$ty>();
+                if constants.$covmap.is_empty() {
+                    if let Some(next_choice) = $next_choice {
+                        choice = next_choice;
+                        continue;
+                    } else {
                         // We don't have any constants to use
                         return Err(());
                     }
+                }
 
-                    // Select a random pair
-                    let cmp_pair = constants
-                        .u8cov
-                        .iter()
-                        .filter(|c| c.0.is_dynamic() || c.1.is_dynamic())
-                        .choose(&mut self.rng)
-                        .expect("u8cov empty?");
+                // Select a random pair
+                let cmp_pair = constants
+                    .$covmap
+                    .iter()
+                    .filter(|c| c.0.is_dynamic() || c.1.is_dynamic())
+                    .choose(&mut self.rng)
+                    .expect("u8cov empty?");
 
-                    // Randomly select an index from the input to start our search
-                    // at.
-                    let start_idx = self.rng.gen_range(0..self.input.len());
-                    let (start, end) = self.input.split_at(start_idx);
-                    if let Some(idx) = end.iter().chain(start.iter()).position(|&b| {
-                        // We need to select a "dynamic" value since const
-                        // values would have been hardcoded into the target
-                        b == if cmp_pair.0.is_dynamic() {
-                            cmp_pair.0.inner()
-                        } else {
-                            cmp_pair.1.inner()
-                        }
-                    }) {
-                        //if let Some(idx) = self.input.iter().position(|&b| b == cmp_pair.0 || b == cmp_pair.1) {
-                        let input = self.input_mut();
-                        let const_value = if cmp_pair.0.is_const() {
-                            cmp_pair.0.inner()
-                        } else {
-                            cmp_pair.1.inner()
-                        };
+                let is_big_endian_input = self.rng.gen();
+                // Randomly select an index from the input to start our search
+                // at.
+                let index_sampler =
+                    rand::seq::index::sample(&mut self.rng, self.input.len(), self.input.len())
+                        .into_iter();
+                let mut found_index = None;
+                let cmp_target = if cmp_pair.0.is_dynamic() {
+                    cmp_pair.0.inner()
+                } else {
+                    cmp_pair.1.inner()
+                };
 
-                        input[idx] = const_value;
+                for idx in index_sampler {
+                    if self.input.len() - idx < ty_size {
+                        continue;
+                    }
 
-                        self.dictionary.u8dict.insert(index, const_value);
+                    let value = if is_big_endian_input {
+                        <$ty>::from_be_bytes(
+                            self.input[idx..idx + ty_size]
+                                .try_into()
+                                .expect("failed to convert byte window to array"),
+                        )
+                    } else {
+                        <$ty>::from_le_bytes(
+                            self.input[idx..idx + ty_size]
+                                .try_into()
+                                .expect("failed to convert byte window to array"),
+                        )
+                    };
 
-                        let cmp_pair = cmp_pair.clone();
-                        constants.u8cov.remove(&cmp_pair);
+                    if value == cmp_target {
+                        found_index = Some(idx);
+                        break;
+                    }
+                }
+                if let Some(idx) = found_index {
+                    let input = self.input_mut();
+                    let const_value = if cmp_pair.0.is_const() {
+                        cmp_pair.0.inner()
+                    } else {
+                        cmp_pair.1.inner()
+                    };
 
-                        return Ok(());
+                    let new_value = if is_big_endian_input {
+                        cmp_target.to_be_bytes()
+                    } else {
+                        cmp_target.to_le_bytes()
+                    };
+
+                    input[idx..idx + ty_size].copy_from_slice(new_value.as_slice());
+
+                    self.dictionary.$dictmap.insert(idx, const_value);
+
+                    let cmp_pair = cmp_pair.clone();
+                    constants.$covmap.remove(&cmp_pair);
+
+                    return Ok(());
+                } else {
+                    if let Some(next_choice) = $next_choice {
+                        choice = next_choice;
+                        continue;
                     } else {
                         return Err(());
                     }
                 }
+            };
+        }
+        loop {
+            match choice {
+                IntegerWidth::U8 => {
+                    change_int!(u8, u8cov, u8dict, None);
+                }
                 IntegerWidth::U16 => {
-                    change_int!(u16, IntegerWidth::U8);
+                    change_int!(u16, u16cov, u16dict, Some(IntegerWidth::U8));
                 }
                 IntegerWidth::U32 => {
-                    change_int!(u16, IntegerWidth::U16);
+                    change_int!(u32, u32cov, u32dict, Some(IntegerWidth::U16));
                 }
                 IntegerWidth::U64 => {
-                    change_int!(u16, IntegerWidth::U32);
+                    change_int!(u64, u64cov, u64dict, Some(IntegerWidth::U32));
                 }
             }
 
