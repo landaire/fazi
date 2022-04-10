@@ -5,7 +5,7 @@ use rand::{
     Rng,
 };
 
-use crate::{driver::CONSTANTS, Fazi};
+use crate::{driver::COMPARISON_OPERANDS, Fazi};
 
 type MutationResult = Result<(), ()>;
 
@@ -411,7 +411,7 @@ impl<R: Rng> Fazi<R> {
             .expect("empty choices?")
             .clone();
 
-        let mut constants = CONSTANTS
+        let mut constants = COMPARISON_OPERANDS
             .get()
             .expect("failed to get CONSTANTS")
             .lock()

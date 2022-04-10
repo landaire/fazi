@@ -6,7 +6,7 @@ use sha1::Digest;
 use signal_hook::iterator::Signals;
 
 use crate::{
-    driver::{handle_crash, save_input, LAST_INPUT},
+    driver::{handle_crash, save_input, FAZI},
     Fazi,
 };
 
@@ -19,11 +19,12 @@ impl<R: Rng> Fazi<R> {
         thread::spawn(move || {
             for sig in signals.forever() {
                 if sig == SIGABRT {
-                    let last_input = LAST_INPUT
+                    let fazi = FAZI
                         .get()
-                        .expect("LAST_INPUT not initialized")
+                        .expect("FAZI not initialized")
                         .lock()
-                        .expect("could not lock LAST_INPUT");
+                        .expect("could not lock FAZI");
+                    let last_input = fazi.input.clone();
                     handle_crash(crashes_dir.as_ref(), last_input.as_slice());
                     save_input(corpus_dir.as_ref(), last_input.as_slice());
                 }

@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    driver::{CONSTANTS, COVERAGE, PC_INFO, U8_COUNTERS},
+    driver::{COMPARISON_OPERANDS, COVERAGE, PC_INFO, U8_COUNTERS},
     exports::fazi_initialize,
 };
 
@@ -216,8 +216,8 @@ extern "C" fn __sanitizer_cov_trace_pc_indir(callee: *const std::ffi::c_void) {
 
 macro_rules! handle_cmp {
     ($arg1:expr, $arg2:expr, $ty:ty) => {
-        let constants = CONSTANTS.get().expect("constants global not initialized");
-        let mut constants = constants.lock().expect("failed to lock CONSTANTS global");
+        let constants = COMPARISON_OPERANDS.get().expect("constants global not initialized");
+        let mut constants = constants.lock().expect("failed to lock COMPARISON_OPERANDS global");
 
         let sizeof_type = std::mem::size_of::<$ty>();
 
@@ -502,8 +502,8 @@ extern "C" fn __sanitizer_weak_hook_memcmp(
         return;
     }
 
-    let constants = CONSTANTS.get().expect("constants global not initialized");
-    let mut constants = constants.lock().expect("failed to lock CONSTANTS global");
+    let constants = COMPARISON_OPERANDS.get().expect("constants global not initialized");
+    let mut constants = constants.lock().expect("failed to lock COMPARISON_OPERANDS global");
 
     let s1 = unsafe { std::slice::from_raw_parts(s1 as *const u8, n) }.to_vec();
     let s2 = unsafe { std::slice::from_raw_parts(s2 as *const u8, n) }.to_vec();

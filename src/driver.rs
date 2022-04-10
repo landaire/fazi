@@ -21,12 +21,20 @@ use std::{
     },
 };
 
-pub(crate) static CONSTANTS: SyncOnceCell<Mutex<CoverageMap>> = SyncOnceCell::new();
+/// Global map of comparison operands from SanCov instrumentation
+pub(crate) static COMPARISON_OPERANDS: SyncOnceCell<Mutex<CoverageMap>> = SyncOnceCell::new();
+/// Set of PCs that the fuzzer has reached
 pub(crate) static COVERAGE: SyncOnceCell<Mutex<HashSet<usize>>> = SyncOnceCell::new();
-pub(crate) static LAST_INPUT: SyncOnceCell<Mutex<Arc<Vec<u8>>>> = SyncOnceCell::new();
+/// The global [`Fazi`] instance. We need to keep a global pointer as the SanCov and
+/// other C FFI entrypoints know nothing about us, but we need to access our
+/// current state
 pub(crate) static FAZI: SyncOnceCell<Mutex<Fazi<StdRng>>> = SyncOnceCell::new();
+/// Indicator if Fazi has been initialized already to avoid accidentally performing
+/// initialization tasks multiple times
 pub(crate) static FAZI_INITIALIZED: AtomicBool = AtomicBool::new(false);
+/// Inline 8bit counters used for PC coverage.
 pub(crate) static mut U8_COUNTERS: Option<&'static [AtomicU8]> = None;
+/// PC info corresponding to the U8 counters.
 pub(crate) static mut PC_INFO: Option<&'static [PcEntry]> = None;
 
 #[cfg(feature = "main_entrypoint")]
@@ -65,11 +73,13 @@ extern "C" fn main() {
 }
 
 impl<R: Rng> Fazi<R> {
+    /// Performs necessary tasks before sending the testcase off to the target
     pub(crate) fn start_iteration(&mut self) {
         self.poison_input();
         self.update_max_size();
     }
 
+    /// Updates the maximum length that we can extend the input to
     pub(crate) fn update_max_size(&mut self) {
         // Update the max length
         if self.options.len_control > 0 && self.current_max_mutation_len < self.max_input_size {
@@ -91,6 +101,10 @@ impl<R: Rng> Fazi<R> {
         self.current_max_mutation_len = std::cmp::max(self.input.len(), self.max_input_size);
     }
 
+    /// Performs tasks necessary immediately after an input has been passed off
+    /// to a target. For example, we need to unpoison the allocated but unused
+    /// bytes in the current input, update coverage, save the input if new
+    /// coverage has been reached, and perform mutation for the next iteration.
     pub(crate) fn end_iteration(&mut self, need_more_data: bool) {
         self.unpoison_input();
 
@@ -125,7 +139,7 @@ impl<R: Rng> Fazi<R> {
             self.current_mutation_depth = 0;
             self.mutations.clear();
 
-            let mut constants = CONSTANTS
+            let mut constants = COMPARISON_OPERANDS
                 .get()
                 .expect("failed to get CONSTANTS")
                 .lock()
@@ -144,7 +158,7 @@ impl<R: Rng> Fazi<R> {
                 self.current_mutation_depth = 0;
                 self.mutations.clear();
 
-                let mut constants = CONSTANTS
+                let mut constants = COMPARISON_OPERANDS
                     .get()
                     .expect("failed to get CONSTANTS")
                     .lock()
@@ -160,14 +174,6 @@ impl<R: Rng> Fazi<R> {
         };
         self.mutations.push(mutation);
         self.current_mutation_depth += 1;
-
-        let mut last_input = LAST_INPUT
-            .get()
-            .expect("LAST_INPUT not initialized")
-            .lock()
-            .expect("failed to lock LAST_INPUT");
-        *last_input = Arc::clone(&self.input);
-        drop(last_input);
 
         self.iterations += 1;
 
@@ -238,7 +244,7 @@ pub(crate) fn handle_crash(crashes_dir: &Path, input: &[u8]) {
     hasher.update(input);
     let result = hasher.finalize();
     let filename = hex::encode(result.as_slice());
-    let crash_file_path = crashes_dir.join(&filename);
+    let crash_file_path = crashes_dir.join(format!("crash-{}", filename));
 
     eprintln!("Received SIGABRT -- saving crash to {:?}", crash_file_path);
     ensure_parent_dir_exists(crash_file_path.as_ref());
@@ -251,7 +257,7 @@ pub(crate) fn save_input(corpus_dir: &Path, input: &[u8]) {
     hasher.update(input);
     let result = hasher.finalize();
     let filename = hex::encode(result.as_slice());
-    let corpus_file_path = corpus_dir.join(&filename);
+    let corpus_file_path = corpus_dir.join(format!("input-{}", filename));
 
     eprintln!("Saving corpus input to {:?}", corpus_file_path);
     ensure_parent_dir_exists(corpus_file_path.as_ref());
@@ -259,6 +265,8 @@ pub(crate) fn save_input(corpus_dir: &Path, input: &[u8]) {
     std::fs::write(corpus_file_path, input).expect("failed to save corpus input file!");
 }
 
+/// Ensures that the parent directory of `path` exists. If it does not, we will
+/// create it.
 fn ensure_parent_dir_exists(path: &Path) {
     let parent = path.parent().expect("path has no parent directory?");
     if !parent.exists() {

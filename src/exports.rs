@@ -4,31 +4,23 @@ use std::{
 };
 
 use crate::{
-    driver::{update_coverage, CONSTANTS, COVERAGE, FAZI, FAZI_INITIALIZED, LAST_INPUT},
+    driver::{update_coverage, COMPARISON_OPERANDS, COVERAGE, FAZI, FAZI_INITIALIZED},
     Fazi,
 };
 
-#[repr(C)]
-pub struct FaziInput {
-    data: *const u8,
-    size: usize,
-}
-
 #[no_mangle]
+/// Main function for initializing the Fazi global state
 pub extern "C" fn fazi_initialize() {
     if FAZI_INITIALIZED.load(Ordering::Relaxed) {
         return;
     }
 
-    CONSTANTS
+    COMPARISON_OPERANDS
         .set(Default::default())
         .expect("CONSTANTS already initialized");
     COVERAGE
         .set(Default::default())
         .expect("COVERAGE already initialized");
-    LAST_INPUT
-        .set(Default::default())
-        .expect("LAST_INPUT already initialized");
 
     let mut fazi = Fazi::default();
 
@@ -42,6 +34,8 @@ pub extern "C" fn fazi_initialize() {
 }
 
 #[no_mangle]
+/// Gets the next testcase in the recoverage queue. If there's no remaining item
+/// in the queue, the `data` pointer will be null and `len` set to 0.
 pub extern "C" fn fazi_next_recoverage_testcase(data: *mut *const u8, len: *mut usize) {
     let mut fazi = FAZI
         .get()
@@ -75,6 +69,8 @@ pub extern "C" fn fazi_next_recoverage_testcase(data: *mut *const u8, len: *mut 
 }
 
 #[no_mangle]
+/// Perform necessary pre-iteration tasks and sets the `data` and `len` fields
+/// to the current testcase and its size, respectively.
 pub extern "C" fn fazi_start_iteration(data: *mut *const u8, len: *mut usize) {
     let mut fazi = FAZI
         .get()
@@ -91,6 +87,9 @@ pub extern "C" fn fazi_start_iteration(data: *mut *const u8, len: *mut usize) {
 }
 
 #[no_mangle]
+/// Signal to end the current iteration. This performs the necessary steps for
+/// gathering new coverage and setting up the input state for the next
+/// iteration
 pub extern "C" fn fazi_end_iteration(need_more_data: bool) {
     let mut fazi = FAZI
         .get()
@@ -102,6 +101,7 @@ pub extern "C" fn fazi_end_iteration(need_more_data: bool) {
 }
 
 #[no_mangle]
+/// Sets the corpus output directory
 pub extern "C" fn fazi_set_corpus_dir(dir: *const libc::c_char) {
     let mut fazi = FAZI
         .get()
@@ -115,6 +115,7 @@ pub extern "C" fn fazi_set_corpus_dir(dir: *const libc::c_char) {
 }
 
 #[no_mangle]
+/// Sets the crashes output directory
 pub extern "C" fn fazi_set_crashes_dir(dir: *const libc::c_char) {
     let mut fazi = FAZI
         .get()
