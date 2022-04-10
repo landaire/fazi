@@ -484,9 +484,9 @@ impl<R: Rng> Fazi<R> {
                     };
 
                     let new_value = if is_big_endian_input {
-                        cmp_target.to_be_bytes()
+                        const_value.to_be_bytes()
                     } else {
-                        cmp_target.to_le_bytes()
+                        const_value.to_le_bytes()
                     };
 
                     input[idx..idx + ty_size].copy_from_slice(new_value.as_slice());
