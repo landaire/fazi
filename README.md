@@ -78,10 +78,10 @@ int main() {
 
     while (true) {
         const char* data = nullptr;
-        size_t size = 0;
-        FaziInput input = fazi_start_iteration(&data, &size);
+        size_t len = 0;
+        fazi_start_iteration(&data, &len);
 
-        bool need_more_data = some_api(input.data, input.len);
+        bool need_more_data = some_api(data, len);
 
         fazi_end_iteration(need_more_data);
     }
