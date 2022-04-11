@@ -43,6 +43,8 @@ Step 3: Run the harness:
 $ ./a.out
 ```
 
+![fazi_running](images/example_run.png "Example of Fazi running")
+
 You can list command-line options with the `--help` flag:
 
 ```
