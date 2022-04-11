@@ -33,9 +33,12 @@ pub(crate) enum MutationStrategy {
     ChangeBinInt,
     /// Copy part of some data to another location
     CopyPart,
-    /// TODO: ????
+    /// Copy part of one input into another
     CrossOver,
+    /// Insert a dictionary value into the current input
     InsertDictionaryValue,
+    /// Use a value from SanCov coverage, attempt to find it in the current input,
+    /// and replace the instance with what we think the value should be.
     UseCmpValue,
 }
 
@@ -69,6 +72,7 @@ impl MutationStrategy {
             MutationStrategy::InsertBytes,
             MutationStrategy::InsertDictionaryValue,
             MutationStrategy::CopyPart,
+            MutationStrategy::CrossOver,
         ];
         // Missing:
         // MutationStrategy::CrossOver,
