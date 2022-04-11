@@ -295,7 +295,7 @@ pub(crate) fn handle_crash(crashes_dir: &Path, input: &[u8]) {
     let filename = hex::encode(result.as_slice());
     let crash_file_path = crashes_dir.join(format!("crash-{}", filename));
 
-    eprintln!("Received SIGABRT -- saving crash to {:?}", crash_file_path);
+    eprintln!("Saving crash to {:?}", crash_file_path);
     ensure_parent_dir_exists(crash_file_path.as_ref());
 
     std::fs::write(crash_file_path, input).expect("failed to save crash file!");
