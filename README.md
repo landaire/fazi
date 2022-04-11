@@ -50,6 +50,12 @@ OPTIONS:
             larger value will result in faster growth while a smaller value will result in slow
             growth [default: 100]
 
+        --max-input-len <MAX_INPUT_LEN>
+            The maximum size (in bytes) that an input can extend to [default: 65000]
+
+        --max-iters <MAX_ITERS>
+            Maximum number of fuzzing iterations before the fuzzer should exit
+
         --max-mutation-depth <MAX_MUTATION_DEPTH>
             The maximum number of times to mutate a single input before moving on to another
             [default: 15]
