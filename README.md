@@ -4,7 +4,7 @@
 
 ![fazi](images/fazi.jpg "Fazi the cat")
 
-A reimplementation of libfuzzer in Rust
+A reimplementation of libfuzzer in Rust with some improvements
 
 ## Supported Features
 
