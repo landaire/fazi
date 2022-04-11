@@ -497,7 +497,6 @@ extern "C" fn __sanitizer_weak_hook_memcmp(
         .insert(caller_pc);
 
     if result == 0 || n <= 1 {
-        println!("result isn't interesting?");
         // these testcases aren't interesting
         return;
     }
@@ -548,7 +547,6 @@ extern "C" fn __sanitizer_weak_hook_strcmp(
     s2: *const libc::c_char,
     result: std::os::raw::c_int,
 ) {
-    println!("strcmp hook hit");
     __sanitizer_weak_hook_memcmp(caller_pc, s1, s2, strlen2(s1, s2), result)
     //   if (!fuzzer::RunningUserCallback) return;
     //   if (result == 0) return;  // No reason to mutate.

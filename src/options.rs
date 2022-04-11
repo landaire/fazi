@@ -34,13 +34,17 @@ pub struct RuntimeOptions {
     #[clap(long, default_value = "100")]
     pub len_control: u32,
 
-    /// The maximum size (in bytes) that an input can extend to
+    /// The maximum size (in bytes) that an input can extend to.
     #[clap(long, default_value = "65000")]
     pub max_input_len: usize,
 
     /// RNG seed.
     #[clap(long)]
     pub seed: Option<u64>,
+
+    /// Maximum number of fuzzing iterations before the fuzzer should exit.
+    #[clap(long)]
+    pub max_iters: Option<usize>,
 
     #[clap(subcommand)]
     pub command: Option<Command>,
@@ -54,6 +58,7 @@ impl Default for RuntimeOptions {
             max_mutation_depth: 15,
             len_control: 100,
             max_input_len: 65000,
+            max_iters: None,
             seed: None,
             command: None,
         }

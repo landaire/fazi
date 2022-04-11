@@ -44,7 +44,7 @@ pub(crate) static mut PC_INFO: Option<&'static [PcEntry]> = None;
 
 #[cfg(feature = "main_entrypoint")]
 #[no_mangle]
-extern "C" fn main() -> io::Result<()> {
+extern "C" fn main() {
     fazi_initialize();
 
     let mut fazi = FAZI
@@ -59,13 +59,13 @@ extern "C" fn main() -> io::Result<()> {
     match fazi.options.command.as_ref() {
         Some(Command::Repro { file_path }) => {
             eprintln!("Reproducing crash: {:?}", file_path);
-            fazi.input = Arc::new(std::fs::read(file_path)?);
+            fazi.input = Arc::new(std::fs::read(file_path).expect("failed to open input file"));
             fazi.start_iteration();
 
             unsafe { f(fazi.input.as_ptr(), fazi.input.len()) };
 
             eprintln!("Input did not reproduce crash!");
-            return Ok(());
+            return;
         }
         None => {
             eprintln!("Performing recoverage");
@@ -86,7 +86,16 @@ extern "C" fn main() -> io::Result<()> {
         let res = unsafe { f(fazi.input.as_ptr(), fazi.input.len()) };
 
         fazi.end_iteration(res != 0);
+
+        if let Some(max_iters) = fazi.options.max_iters {
+            if max_iters == fazi.iterations {
+                eprintln!("Maximum number of iterations reached");
+                break;
+            }
+        }
     }
+
+    eprintln!("Done fuzzing!");
 }
 
 impl<R: Rng> Fazi<R> {
@@ -139,7 +148,7 @@ impl<R: Rng> Fazi<R> {
         let can_request_more_data = !self.min_input_size.is_some();
 
         if old_coverage != new_coverage {
-            println!(
+            eprintln!(
                 "old coverage: {}, new coverage: {}, mutations: {:?}",
                 old_coverage, new_coverage, self.mutations
             );
@@ -194,7 +203,7 @@ impl<R: Rng> Fazi<R> {
         self.iterations += 1;
 
         if self.iterations % 1000 == 0 {
-            println!("iter: {}", self.iterations);
+            eprintln!("iter: {}", self.iterations);
         }
     }
 
