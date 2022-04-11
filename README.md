@@ -13,6 +13,8 @@ Step 1: Build fazi:
 $ cargo build --release
 ```
 
+*Note: Fazi can also be built without the main entrypoint by providing the `--no-default-features` flag*
+
 Step 2: Build your harness:
 
 ```bash
