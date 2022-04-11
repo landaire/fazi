@@ -11,6 +11,8 @@ use crate::{
 };
 
 impl<R: Rng> Fazi<R> {
+    /// Sets up the signal handling routine which will be used for ensuring
+    /// crashing inputs are saved.
     pub(crate) fn setup_signal_handler(&self) {
         let mut signals = Signals::new(&[SIGABRT]).expect("failed to setup signal handler");
 

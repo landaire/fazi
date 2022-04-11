@@ -10,20 +10,24 @@ use mutations::MutationStrategy;
 use rand::{prelude::*, SeedableRng};
 use sha2::{Digest, Sha256};
 
+/// Interesting values that can be used during mutations
 mod dictionary;
+/// Main fuzzing driver/entrypoint code
 mod driver;
+/// Exports for interfacing with Fazi via FFI
 pub mod exports;
+/// Main mutation logic
 mod mutations;
+/// Runtime configuration options
 mod options;
+/// SanitizerCoverage callbacks
 mod sancov;
+/// Signal handling code
 mod signal;
+/// Module for weak imports pulled from the Rust standard library
 mod weak;
+/// Weakly linked imports
 mod weak_imports;
-
-// extern "C" {
-//     #[linkage = "weak"]
-//     fn LLVMFuzzerTestOneInput(data: *const u8, size: usize) -> std::os::raw::c_int;
-// }
 
 #[derive(Debug, Default)]
 pub(crate) struct Dictionary {
@@ -33,6 +37,7 @@ pub(crate) struct Dictionary {
     u64dict: BTreeMap<usize, u64>,
 }
 
+/// Main Fazi structure that holds our state.
 #[derive(Debug)]
 pub struct Fazi<R: Rng> {
     rng: R,
@@ -71,6 +76,8 @@ impl Default for Fazi<StdRng> {
 }
 
 impl Fazi<StdRng> {
+    /// Set Fazi's runtime options. This may re-initialize the RNG if a seed
+    /// is present
     pub fn set_options(&mut self, options: RuntimeOptions) {
         if let Some(seed) = options.seed {
             let mut hasher = Sha256::new();
@@ -88,6 +95,9 @@ impl Fazi<StdRng> {
 }
 
 impl<R: Rng + SeedableRng> Fazi<R> {
+    /// Create a new instance of Fazi with default settings. This differs from
+    /// the [`Fazi::default()`] implementation only when the backing RNG is not
+    /// a [`StdRng`].
     pub fn new() -> Self {
         Fazi {
             rng: R::from_entropy(),
@@ -106,24 +116,7 @@ impl<R: Rng + SeedableRng> Fazi<R> {
         }
     }
 
-    pub fn new_from_seed(seed: R::Seed) -> Self {
-        Fazi {
-            rng: R::from_seed(seed),
-            input: Default::default(),
-            dictionary: Default::default(),
-            corpus: Default::default(),
-            options: Default::default(),
-            iterations: 0,
-            min_input_size: None,
-            recoverage_queue: Default::default(),
-            current_mutation_depth: 0,
-            mutations: Default::default(),
-            max_input_size: 4,
-            last_corpus_update_run: 0,
-            current_max_mutation_len: 0,
-        }
-    }
-
+    /// Load inputs from disk
     pub fn restore_inputs(&mut self) {
         let input_paths: [&Path; 1] = [self.options.corpus_dir.as_ref()];
         for &path in &input_paths {
@@ -146,19 +139,5 @@ impl<R: Rng + SeedableRng> Fazi<R> {
         }
 
         self.recoverage_queue = self.corpus.clone();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_add() {
-        let mut fazi = Fazi::default();
-        for _i in 0..30 {
-            fazi.mutate_input();
-            println!("{:?}", fazi.input);
-        }
     }
 }

@@ -725,6 +725,13 @@ impl<R: Rng> Fazi<R> {
         Err(())
     }
 
+    /// Get a mutable reference to the current input. This may perform a clone
+    /// operation depending on how many references to the input exist. In most
+    /// cases, this would result in a clone *if* the input has already been used
+    /// in a test run that resulted in more coverage since we add it to a global
+    /// list of inputs. However, if that's not the case and there's only the single
+    /// reference on the [`Fazi`] instance, then this will return a mutable
+    /// reference to the underlying data as it's safe to do so.
     fn input_mut(&mut self) -> &mut Vec<u8> {
         Arc::make_mut(&mut self.input)
     }

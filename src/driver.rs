@@ -91,7 +91,7 @@ extern "C" fn main() -> io::Result<()> {
 
 impl<R: Rng> Fazi<R> {
     /// Performs necessary tasks before sending the testcase off to the target
-    pub(crate) fn start_iteration(&mut self) {
+    pub fn start_iteration(&mut self) {
         self.poison_input();
         self.update_max_size();
     }
@@ -122,7 +122,7 @@ impl<R: Rng> Fazi<R> {
     /// to a target. For example, we need to unpoison the allocated but unused
     /// bytes in the current input, update coverage, save the input if new
     /// coverage has been reached, and perform mutation for the next iteration.
-    pub(crate) fn end_iteration(&mut self, need_more_data: bool) {
+    pub fn end_iteration(&mut self, need_more_data: bool) {
         self.unpoison_input();
 
         let (new_coverage, old_coverage) = update_coverage();
