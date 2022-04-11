@@ -1,4 +1,4 @@
-[![crates.io](https://img.shields.io/crates/v/fazi)](https://crates.io/crates/fazi) [![docs.rs](https://img.shields.io/docsrs/v/fazi)](https://docs.rs/fazi)
+[![crates.io](https://img.shields.io/crates/v/fazi)](https://crates.io/crates/fazi) [![docs.rs](https://img.shields.io/docsrs/fazi)](https://docs.rs/fazi)
 
 # Fazi
 
