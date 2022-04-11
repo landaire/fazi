@@ -226,7 +226,7 @@ impl<R: Rng> Fazi<R> {
         let max_count = if ignore_max {
             std::cmp::max(4, self.max_input_size)
         } else {
-            std::cmp::min(self.current_max_mutation_len - self.max_input_size as usize, 128)
+            std::cmp::min(self.max_input_size, 128)
         };
 
         let count: usize = self.rng.gen_range(2..max_count);

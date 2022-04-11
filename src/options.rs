@@ -34,6 +34,10 @@ pub struct RuntimeOptions {
     #[clap(long, default_value = "100")]
     pub len_control: u32,
 
+    /// The maximum size (in bytes) that an input can extend to
+    #[clap(long, default_value = "65000")]
+    pub max_input_len: usize,
+
     /// RNG seed.
     #[clap(long)]
     pub seed: Option<u64>,
@@ -49,6 +53,7 @@ impl Default for RuntimeOptions {
             crashes_dir: CRASHES_DEFAULT_DIR.into(),
             max_mutation_depth: 15,
             len_control: 100,
+            max_input_len: 65000,
             seed: None,
             command: None,
         }

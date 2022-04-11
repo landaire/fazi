@@ -98,7 +98,6 @@ impl<R: Rng> Fazi<R> {
 
     /// Updates the maximum length that we can extend the input to
     pub(crate) fn update_max_size(&mut self) {
-        // Update the max length
         if self.options.len_control > 0 && self.current_max_mutation_len < self.max_input_size {
             let max_mutation_len_f64: f64 = self.max_input_size as f64;
             let len_control: f64 = self
@@ -111,7 +110,7 @@ impl<R: Rng> Fazi<R> {
                 let max_mutation_len = self.max_input_size;
                 let new_max_mutation_len =
                     max_mutation_len + (max_mutation_len_f64.log10() as usize);
-                self.max_input_size = new_max_mutation_len;
+                self.max_input_size = std::cmp::min(new_max_mutation_len, self.options.max_input_len);
             }
         }
 
