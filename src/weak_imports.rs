@@ -23,6 +23,16 @@ pub(crate) fn libfuzzer_initialize_fn() -> Option<
     }
 }
 
+pub(crate) fn sanitizer_set_death_callback_fn(
+) -> Option<unsafe extern "C" fn( extern "C" fn()) -> std::ffi::c_void> {
+    #[allow(non_snake_case)]
+    {
+        weak!(fn __sanitizer_set_death_callback(extern "C" fn()) -> std::ffi::c_void);
+
+        __sanitizer_set_death_callback.get()
+    }
+}
+
 pub(crate) fn asan_unpoison_memory_region_fn(
 ) -> Option<unsafe extern "C" fn(*const u8, usize) -> std::os::raw::c_void> {
     weak!(fn __asan_unpoison_memory_region(*const u8, usize) -> std::os::raw::c_void);

@@ -84,12 +84,26 @@ extern "C" fn main() {
         }
     }
 
+    drop(fazi);
     eprintln!("Performing fuzzing");
     loop {
+        let mut fazi = FAZI
+            .get()
+            .expect("FAZI not initialized")
+            .lock()
+            .expect("could not lock FAZI");
         fazi.start_iteration();
+        let input = fazi.input.as_ptr();
+        let len = fazi.input.len();
+        drop(fazi);
 
-        let res = unsafe { run_input(fazi.input.as_ptr(), fazi.input.len()) };
+        let res = unsafe { run_input(input, len) };
 
+        let mut fazi = FAZI
+            .get()
+            .expect("FAZI not initialized")
+            .lock()
+            .expect("could not lock FAZI");
         fazi.end_iteration(res != 0);
 
         if let Some(max_iters) = fazi.options.max_iters {
