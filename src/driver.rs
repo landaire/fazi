@@ -201,7 +201,12 @@ impl<R: Rng> Fazi<R> {
 
         self.iterations += 1;
 
-        if self.iterations % 1000 == 0 {
+        let iteration_modulo = match self.iterations {
+            0..=100_000 => 1000,
+            100_001..=1_000_000 => 100_000,
+            _ => 1_000_000,
+        };
+        if self.iterations % iteration_modulo == 0 {
             eprintln!("iter: {}", self.iterations);
         }
     }
