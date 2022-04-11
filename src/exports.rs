@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    driver::{update_coverage, COMPARISON_OPERANDS, COVERAGE, FAZI, FAZI_INITIALIZED},
+    driver::{update_coverage, COMPARISON_OPERANDS, COVERAGE, FAZI, FAZI_INITIALIZED, U8_COUNTERS, PC_INFO},
     Fazi,
 };
 
@@ -21,6 +21,10 @@ pub extern "C" fn fazi_initialize() {
     COVERAGE
         .set(Default::default())
         .expect("COVERAGE already initialized");
+    U8_COUNTERS.set(Default::default())
+        .expect("U8_COUNTERS already initialized");
+    PC_INFO.set(Default::default())
+        .expect("PC_INFO already initialized");
 
     let mut fazi = Fazi::default();
 

@@ -22,7 +22,6 @@ impl PcEntry {
     }
 }
 
-
 extern "C" {
     #[link_name = "llvm.returnaddress"]
     fn return_address(a: i32) -> *const u8;
@@ -167,13 +166,16 @@ extern "C" fn __sanitizer_cov_trace_pc() {
 extern "C" fn __sanitizer_cov_8bit_counters_init(start: *mut u8, stop: *mut u8) {
     fazi_initialize();
 
-    // println!("init");
-    // todo!()
-    //   fuzzer::TPC.HandleInline8bitCountersInit(Start, Stop);
+    let mut u8_counters = U8_COUNTERS
+        .get()
+        .expect("U8_COUNTERS not initialized")
+        .lock()
+        .expect("failed to lock U8_COUNTERS");
+
     unsafe {
         let counters =
             std::slice::from_raw_parts(start as *mut AtomicU8, stop as usize - start as usize);
-        U8_COUNTERS = Some(counters);
+        u8_counters.push(counters);
     }
 }
 
@@ -187,12 +189,14 @@ extern "C" fn __sanitizer_cov_pcs_init(
     // println!("{pcs_beg:p}, {pcs_end:p}");
     // todo!()
     //   fuzzer::TPC.HandlePCsInit(pcs_beg, pcs_end);
+    let mut module_pc_info = PC_INFO.get().expect("PC_INFO not initialize").lock().expect("failed to lock PC_INFO");
     unsafe {
         let pc_info = std::slice::from_raw_parts(
             pcs_beg as *const PcEntry,
             pcs_end as usize - pcs_beg as usize,
         );
-        PC_INFO = Some(pc_info);
+
+        module_pc_info.push(pc_info);
     }
 }
 
@@ -223,8 +227,12 @@ extern "C" fn __sanitizer_cov_trace_pc_indir(callee: *const std::ffi::c_void) {
 
 macro_rules! handle_cmp {
     ($arg1:expr, $arg2:expr, $ty:ty) => {
-        let constants = COMPARISON_OPERANDS.get().expect("constants global not initialized");
-        let mut constants = constants.lock().expect("failed to lock COMPARISON_OPERANDS global");
+        let constants = COMPARISON_OPERANDS
+            .get()
+            .expect("constants global not initialized");
+        let mut constants = constants
+            .lock()
+            .expect("failed to lock COMPARISON_OPERANDS global");
 
         let sizeof_type = std::mem::size_of::<$ty>();
 
@@ -508,8 +516,12 @@ extern "C" fn __sanitizer_weak_hook_memcmp(
         return;
     }
 
-    let constants = COMPARISON_OPERANDS.get().expect("constants global not initialized");
-    let mut constants = constants.lock().expect("failed to lock COMPARISON_OPERANDS global");
+    let constants = COMPARISON_OPERANDS
+        .get()
+        .expect("constants global not initialized");
+    let mut constants = constants
+        .lock()
+        .expect("failed to lock COMPARISON_OPERANDS global");
 
     let s1 = unsafe { std::slice::from_raw_parts(s1 as *const u8, n) }.to_vec();
     let s2 = unsafe { std::slice::from_raw_parts(s2 as *const u8, n) }.to_vec();

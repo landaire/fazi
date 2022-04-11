@@ -37,9 +37,9 @@ pub(crate) static FAZI: SyncOnceCell<Mutex<Fazi<StdRng>>> = SyncOnceCell::new();
 /// initialization tasks multiple times
 pub(crate) static FAZI_INITIALIZED: AtomicBool = AtomicBool::new(false);
 /// Inline 8bit counters used for PC coverage.
-pub(crate) static mut U8_COUNTERS: Option<&'static [AtomicU8]> = None;
+pub(crate) static U8_COUNTERS: SyncOnceCell<Mutex<Vec<&'static [AtomicU8]>>> = SyncOnceCell::new();
 /// PC info corresponding to the U8 counters.
-pub(crate) static mut PC_INFO: Option<&'static [PcEntry]> = None;
+pub(crate) static PC_INFO: SyncOnceCell<Mutex<Vec<&'static [PcEntry]>>> = SyncOnceCell::new();
 
 #[cfg(feature = "main_entrypoint")]
 #[no_mangle]
@@ -276,12 +276,14 @@ pub(crate) fn update_coverage() -> (usize, usize) {
         .expect("failed to lock COVERAGE");
 
     let old_coverage = coverage.len();
-    for (idx, counter) in unsafe { U8_COUNTERS.as_ref().unwrap().iter().enumerate() } {
-        if counter.load(Ordering::Relaxed) > 0 {
-            // Grab the PC corresponding tot his entry
-            let pc_info = unsafe { &PC_INFO.as_ref().unwrap()[idx] };
-
-            coverage.insert(pc_info.pc);
+    let u8_counters = U8_COUNTERS.get().expect("U8_COUNTERS not initialized").lock().expect("failed to lock U8_COUNTERS");
+    let module_pc_info = PC_INFO.get().expect("PC_INFO not initialize").lock().expect("failed to lock PC_INFO");
+    for (module_idx, module_counters) in u8_counters.iter().enumerate() {
+        for (counter_idx, counter) in module_counters.iter().enumerate() {
+            if counter.load(Ordering::Relaxed) > 0 {
+                let pc_info = &module_pc_info[module_idx][counter_idx];
+                coverage.insert(pc_info.pc);
+            }
         }
     }
 
