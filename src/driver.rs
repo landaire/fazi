@@ -11,7 +11,6 @@ use crate::{
     weak_imports::*,
     Fazi,
 };
-use std::io;
 use std::{
     collections::HashSet,
     lazy::SyncOnceCell,

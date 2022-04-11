@@ -2,11 +2,14 @@ use crate::weak::weak;
 
 pub(crate) fn libfuzzer_runone_fn() -> unsafe extern "C" fn(*const u8, usize) -> std::os::raw::c_int
 {
-    weak!(fn LLVMFuzzerTestOneInput(*const u8, usize) -> std::os::raw::c_int);
+    #[allow(non_snake_case)] {
+        weak!(fn LLVMFuzzerTestOneInput(*const u8, usize) -> std::os::raw::c_int);
 
-    LLVMFuzzerTestOneInput
-        .get()
-        .expect("failed to get LLVMFuzzerTestOneInput")
+
+        LLVMFuzzerTestOneInput
+            .get()
+            .expect("failed to get LLVMFuzzerTestOneInput")
+    }
 }
 
 pub(crate) fn asan_unpoison_memory_region_fn(
