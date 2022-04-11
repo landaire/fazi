@@ -16,6 +16,13 @@ pub(crate) struct PcEntry {
     pub flags: usize,
 }
 
+impl PcEntry {
+    pub(crate) fn is_fn_entry(&self) -> bool {
+        self.flags & 1 != 0
+    }
+}
+
+
 extern "C" {
     #[link_name = "llvm.returnaddress"]
     fn return_address(a: i32) -> *const u8;
