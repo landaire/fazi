@@ -86,6 +86,25 @@ SUBCOMMANDS:
     repro    Reproduce some crash
 ```
 
+### Running the Example Rust Harness
+
+The example pure Rust harness can be found at the [/examples/simple_harness.rs](/examples/simple_harness.rs).
+
+To build/run it, clone the repo and run the following commands:
+
+```bash
+cargo rustc --no-default-features --example simple_harness -- \
+    -Znew-llvm-pass-manager=no \
+    -C passes=sancov \
+    -C llvm-args=-sanitizer-coverage-level=3 \
+    -C llvm-args=-sanitizer-coverage-inline-8bit-counters \
+    -C llvm-args=-sanitizer-coverage-trace-compares \
+    -C llvm-args=-sanitizer-coverage-pc-table \
+    -Z sanitizer=address
+
+./target/debug/examples/simple_harness
+```
+
 ## Why
 
 While libfuzzer can be used as a library, engaging with it from some environments may be difficult to setup. Fazi provides
