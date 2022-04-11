@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
 
 use rand::{
     prelude::{IteratorRandom, SliceRandom},
@@ -223,7 +226,7 @@ impl<R: Rng> Fazi<R> {
         let max_count = if ignore_max {
             std::cmp::max(4, self.max_input_size)
         } else {
-            std::cmp::min(self.max_input_size as usize, 128)
+            std::cmp::min(self.current_max_mutation_len - self.max_input_size as usize, 128)
         };
 
         let count: usize = self.rng.gen_range(2..max_count);
@@ -691,38 +694,34 @@ impl<R: Rng> Fazi<R> {
 
     /// Copy part of the input to another position in the current input.
     fn copy_part(&mut self) -> MutationResult {
-        if self.input.is_empty() {
-            return Err(());
-        }
-
-        let copy_from = self.rng.gen_range(0..self.input.len());
-        let mut copy_len = self.rng.gen_range(1..=(self.input.len() - copy_from));
-        let copy_to = self.rng.gen_range(0..=self.input.len());
-
-        if self.input.len() + copy_len > self.current_max_mutation_len {
-            let delta = self
-                .current_max_mutation_len
-                .saturating_sub(self.input.len());
-            if delta == 0 {
-                return Err(());
-            }
-
-            copy_len = delta;
-        }
-
-        let original_input = Arc::clone(&self.input);
-        let data_to_copy = &original_input[copy_from..(copy_from + copy_len)];
-        let input = self.input_mut();
-        for &byte in data_to_copy.iter().rev() {
-            input.insert(copy_to, byte);
-        }
-
-        Ok(())
+        let original_input = self.input.clone();
+        let new_input = Arc::make_mut(&mut self.input);
+        copy_helper(
+            &original_input,
+            new_input,
+            &mut self.rng,
+            self.current_max_mutation_len,
+        )
     }
 
     /// Copy part of a different input into this one.
     fn cross_over(&mut self) -> MutationResult {
-        Err(())
+        if self.corpus.len() < 2 {
+            return Err(());
+        }
+
+        let target_input = Arc::make_mut(&mut self.input);
+        let original_input = self
+            .corpus
+            .choose(&mut self.rng)
+            .expect("could not choose item from corpus");
+
+        copy_helper(
+            &original_input,
+            target_input,
+            &mut self.rng,
+            self.current_max_mutation_len,
+        )
     }
 
     /// Get a mutable reference to the current input. This may perform a clone
@@ -735,4 +734,36 @@ impl<R: Rng> Fazi<R> {
     fn input_mut(&mut self) -> &mut Vec<u8> {
         Arc::make_mut(&mut self.input)
     }
+}
+
+/// Helper function for [`copy_part()`] and [`cross_over()`].
+fn copy_helper(
+    original: &[u8],
+    target: &mut Vec<u8>,
+    rng: &mut impl Rng,
+    max_mutation_len: usize,
+) -> MutationResult {
+    if original.is_empty() {
+        return Err(());
+    }
+
+    let copy_from = rng.gen_range(0..original.len());
+    let mut copy_len = rng.gen_range(1..=(original.len() - copy_from));
+    let copy_to = rng.gen_range(0..=target.len());
+
+    if target.len() + copy_len > max_mutation_len {
+        let delta = max_mutation_len.saturating_sub(target.len());
+        if delta == 0 {
+            return Err(());
+        }
+
+        copy_len = delta;
+    }
+
+    let data_to_copy = &original[copy_from..(copy_from + copy_len)];
+    for &byte in data_to_copy.iter().rev() {
+        target.insert(copy_to, byte);
+    }
+
+    Ok(())
 }

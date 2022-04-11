@@ -41,17 +41,30 @@ pub(crate) struct Dictionary {
 #[derive(Debug)]
 pub struct Fazi<R: Rng> {
     rng: R,
+    /// Current input
     input: Arc<Vec<u8>>,
+    /// Dictionary of SanCov comparison operands we've observed
     dictionary: Dictionary,
+    /// All inputs in our fuzzer corpus
     corpus: Vec<Arc<Vec<u8>>>,
+    /// Our runtime configuration
     options: RuntimeOptions,
+    /// Number of fuzz iterations performed
     iterations: usize,
+    /// The smallest an input should be based off of when the target stops
+    /// telling us it needs more data
     min_input_size: Option<usize>,
+    /// All of the inputs which have not yet been run through recoverage
     recoverage_queue: Vec<Arc<Vec<u8>>>,
+    /// How many times the current input has been mutated
     current_mutation_depth: usize,
+    /// Mutations applied to the current input
     mutations: Vec<MutationStrategy>,
+    /// Hard stop upper bound for an input size
     max_input_size: usize,
+    /// The maximum input length at this time
     current_max_mutation_len: usize,
+    /// Counter for when we last updated the max input length
     last_corpus_update_run: usize,
 }
 
