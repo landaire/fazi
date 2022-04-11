@@ -21,7 +21,7 @@ Anything else that's missing from [libFuzzer's featureset](https://www.llvm.org/
 
 ## Usage
 
-Step 1: Build fazi:
+Step 1: Build fazi (requires Rust nightly):
 
 ```bash
 $ cargo build --release
