@@ -33,15 +33,33 @@ You can list command-line options with the `--help` flag:
 fazi
 
 USAGE:
-    a.out [OPTIONS]
+    a.out [OPTIONS] [SUBCOMMAND]
 
 OPTIONS:
-        --corpus-dir <CORPUS_DIR>                    [default: ./corpus]
-        --crashes-dir <CRASHES_DIR>                  [default: ./crashes]
-    -h, --help                                       Print help information
-        --len-control <LEN_CONTROL>                  [default: 100]
-        --max-mutation-depth <MAX_MUTATION_DEPTH>    [default: 15]
+        --corpus-dir <CORPUS_DIR>
+            Location at which inputs that cause new coverage will be saved [default: ./corpus]
+
+        --crashes-dir <CRASHES_DIR>
+            Location at which crashing inputs will be saved [default: ./crashes]
+
+    -h, --help
+            Print help information
+
+        --len-control <LEN_CONTROL>
+            Length control is used in an algorithm for deciding how quickly the input size grows. A
+            larger value will result in faster growth while a smaller value will result in slow
+            growth [default: 100]
+
+        --max-mutation-depth <MAX_MUTATION_DEPTH>
+            The maximum number of times to mutate a single input before moving on to another
+            [default: 15]
+
         --seed <SEED>
+            RNG seed
+
+SUBCOMMANDS:
+    help     Print this message or the help of the given subcommand(s)
+    repro    Reproduce some crash
 ```
 
 ## Why

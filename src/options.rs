@@ -13,7 +13,6 @@ pub enum Command {
     },
 }
 
-/// `RuntimeOptions` defines the settings that will be used for Fazi
 #[derive(Parser, Debug)]
 pub struct RuntimeOptions {
     /// Location at which inputs that cause new coverage will be saved
