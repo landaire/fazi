@@ -1,7 +1,14 @@
 [package]
 name = "fazi"
+description = "A drop-in replacement for libFuzzer"
 version = "0.1.0"
 edition = "2021"
+author = "Lander Brandt"
+readme = "README.md"
+keywords = ["fuzzing", "libfuzzer"]
+repo = "https://github.com/landaire/fazi"
+documentation = "https://docs.rs/fazi"
+license = "MIT OR Apache-2.0"
 
 [lib]
 crate-type = ["rlib", "staticlib", "cdylib"]

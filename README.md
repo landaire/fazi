@@ -11,7 +11,7 @@ A reimplementation of libfuzzer in Rust
 - [x] Building without a `main()` entry point
 - [x] Crash replaying
 - [x] Recoverage
-- [ ] Forking support
+- [ ] Scaling/forking support
 - [ ] Timeout detection
 - [ ] Custom dictionaries
 
@@ -30,7 +30,7 @@ $ cargo build --release
 Step 2: Build your harness:
 
 ```bash
-$ clang ./main.c -fsanitize=fuzzer-no-link -fsanitize=address -lfazi -L$FAZI_DIR/target/release/
+$ FAZI_DIR="../path-to-fazi" clang ./main.c -fsanitize=fuzzer-no-link -fsanitize=address -lfazi -L$FAZI_DIR/target/release/
 ```
 
 Step 3: Run the harness:
