@@ -1,6 +1,6 @@
 # Fazi
 
-![fazi](images/fazi.jpg "My brother's cat Fazi")
+![fazi](images/fazi.jpg "Fazi the cat")
 
 A reimplementation of libfuzzer in Rust
 
