@@ -1,3 +1,5 @@
+![crates.io](https://img.shields.io/crates/v/fazi) ![docs.rs](https://img.shields.io/docsrs/v/fazi)
+
 # Fazi
 
 ![fazi](images/fazi.jpg "Fazi the cat")
