@@ -53,7 +53,13 @@ extern "C" fn main() {
         .expect("could not lock FAZI");
 
     fazi.set_options(RuntimeOptions::parse());
-    let f = libfuzzer_runone_fn();
+    let run_input = libfuzzer_runone_fn();
+    let user_initialize = libfuzzer_initialize_fn();
+    if let Some(user_initialize) = user_initialize {
+        unsafe {
+            user_initialize(std::ptr::null_mut(), std::ptr::null_mut());
+        }
+    }
 
     match fazi.options.command.as_ref() {
         Some(Command::Repro { file_path }) => {
@@ -61,7 +67,7 @@ extern "C" fn main() {
             fazi.input = Arc::new(std::fs::read(file_path).expect("failed to open input file"));
             fazi.start_iteration();
 
-            unsafe { f(fazi.input.as_ptr(), fazi.input.len()) };
+            unsafe { run_input(fazi.input.as_ptr(), fazi.input.len()) };
 
             eprintln!("Input did not reproduce crash!");
             return;
@@ -70,7 +76,7 @@ extern "C" fn main() {
             eprintln!("Performing recoverage");
             for input in fazi.recoverage_queue.drain(..) {
                 unsafe {
-                    f(input.as_ptr(), input.len());
+                    run_input(input.as_ptr(), input.len());
                 }
             }
 
@@ -82,7 +88,7 @@ extern "C" fn main() {
     loop {
         fazi.start_iteration();
 
-        let res = unsafe { f(fazi.input.as_ptr(), fazi.input.len()) };
+        let res = unsafe { run_input(fazi.input.as_ptr(), fazi.input.len()) };
 
         fazi.end_iteration(res != 0);
 

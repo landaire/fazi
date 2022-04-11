@@ -13,9 +13,11 @@ A reimplementation of libfuzzer in Rust with some improvements
 - [x] Building without a `main()` entry point
 - [x] Crash replaying
 - [x] Recoverage
+- [x] Custom user initialization
 - [ ] Scaling/forking support
 - [ ] Timeout detection
 - [ ] Custom dictionaries
+- [ ] Custom user-defined mutations
 
 Anything else that's missing from [libFuzzer's featureset](https://www.llvm.org/docs/LibFuzzer.html#options) will likely not be supported. Feel free to file an issue if you'd like to voice support for something.
 
