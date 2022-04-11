@@ -289,6 +289,8 @@ impl<R: Rng> Fazi<R> {
                     let is_big_endian_input = self.rng.gen();
                     let offset = if self.input.len() > offset && self.rng.gen() {
                         offset
+                    } else if self.input.is_empty() {
+                        0
                     } else {
                         self.rng.gen_range(0..self.input.len())
                     };

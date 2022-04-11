@@ -1,4 +1,14 @@
+use std::collections::BTreeMap;
+
 use rand::{prelude::SliceRandom, Rng};
+
+#[derive(Debug, Default)]
+pub(crate) struct Dictionary {
+    pub u8dict: BTreeMap<usize, u8>,
+    pub u16dict: BTreeMap<usize, u16>,
+    pub u32dict: BTreeMap<usize, u32>,
+    pub u64dict: BTreeMap<usize, u64>,
+}
 
 static INTERESTING_NUMBERS_U8: &'static [u8] = &[
     std::u8::MIN,

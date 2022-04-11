@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    driver::{update_coverage, COMPARISON_OPERANDS, COVERAGE, FAZI, FAZI_INITIALIZED, U8_COUNTERS, PC_INFO},
+    driver::{update_coverage, COMPARISON_OPERANDS, COVERAGE, FAZI, FAZI_INITIALIZED, U8_COUNTERS, PC_INFO, LAST_INPUT},
     Fazi,
 };
 
@@ -14,27 +14,15 @@ pub extern "C" fn fazi_initialize() {
     if FAZI_INITIALIZED.load(Ordering::Relaxed) {
         return;
     }
-
-    COMPARISON_OPERANDS
-        .set(Default::default())
-        .expect("CONSTANTS already initialized");
-    COVERAGE
-        .set(Default::default())
-        .expect("COVERAGE already initialized");
-    U8_COUNTERS.set(Default::default())
-        .expect("U8_COUNTERS already initialized");
-    PC_INFO.set(Default::default())
-        .expect("PC_INFO already initialized");
-
     let mut fazi = Fazi::default();
 
     fazi.restore_inputs();
     fazi.setup_signal_handler();
 
+    fazi.initialize_globals();
+
     FAZI.set(Mutex::new(fazi))
         .expect("FAZI already initialized");
-
-    FAZI_INITIALIZED.store(true, Ordering::Relaxed);
 }
 
 #[no_mangle]

@@ -14,11 +14,11 @@ use crate::{
 use std::{
     collections::HashSet,
     lazy::SyncOnceCell,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, AtomicU8, Ordering},
         Arc, Mutex,
-    },
+    }, thread,
 };
 
 use clap::StructOpt;
@@ -40,6 +40,13 @@ pub(crate) static FAZI_INITIALIZED: AtomicBool = AtomicBool::new(false);
 pub(crate) static U8_COUNTERS: SyncOnceCell<Mutex<Vec<&'static [AtomicU8]>>> = SyncOnceCell::new();
 /// PC info corresponding to the U8 counters.
 pub(crate) static PC_INFO: SyncOnceCell<Mutex<Vec<&'static [PcEntry]>>> = SyncOnceCell::new();
+/// The most recent input that was used for fuzzing.
+/// SAFETY: This value should only ever be read from the [`signal::death_callback()`],
+/// at which point we are about to exit and the fuzzer loop should not be running,
+/// so there should be no chance of a race condition.
+pub(crate) static mut LAST_INPUT: Option<Arc<Vec<u8>>> = None;
+pub(crate) static mut CRASHES_DIR: Option<PathBuf> = None;
+pub(crate) static mut INPUTS_DIR: Option<PathBuf> = None;
 
 #[cfg(feature = "main_entrypoint")]
 #[no_mangle]
@@ -84,26 +91,14 @@ extern "C" fn main() {
         }
     }
 
-    drop(fazi);
     eprintln!("Performing fuzzing");
     loop {
-        let mut fazi = FAZI
-            .get()
-            .expect("FAZI not initialized")
-            .lock()
-            .expect("could not lock FAZI");
         fazi.start_iteration();
         let input = fazi.input.as_ptr();
         let len = fazi.input.len();
-        drop(fazi);
 
         let res = unsafe { run_input(input, len) };
 
-        let mut fazi = FAZI
-            .get()
-            .expect("FAZI not initialized")
-            .lock()
-            .expect("could not lock FAZI");
         fazi.end_iteration(res != 0);
 
         if let Some(max_iters) = fazi.options.max_iters {
@@ -122,6 +117,9 @@ impl<R: Rng> Fazi<R> {
     pub fn start_iteration(&mut self) {
         poison_input(self.input.as_ref());
         self.update_max_size();
+        unsafe {
+            LAST_INPUT = Some(self.input.clone());
+        }
     }
 
     /// Updates the maximum length that we can extend the input to

@@ -27,3 +27,6 @@ sha2 = "0.10"
 [features]
 default = ["main_entrypoint"]
 main_entrypoint = []
+
+[[example]]
+name = "simple_harness"
