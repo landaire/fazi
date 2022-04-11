@@ -7,6 +7,7 @@ use std::{collections::BTreeMap, fs, path::Path, sync::Arc};
 
 use crate::options::RuntimeOptions;
 
+use driver::{update_coverage, poison_input, unpoison_input};
 use mutations::MutationStrategy;
 use rand::{prelude::*, SeedableRng};
 use sha2::{Digest, Sha256};
@@ -153,5 +154,18 @@ impl<R: Rng + SeedableRng> Fazi<R> {
         }
 
         self.recoverage_queue = self.corpus.clone();
+    }
+
+    /// Iterate over the inputs read from disk and replay them back.
+    pub fn perform_recoverage(&mut self, callback: impl Fn(&[u8])) {
+        for input in self.recoverage_queue.drain(..) {
+            update_coverage();
+
+            poison_input(&input);
+
+            (callback)(input.as_slice());
+
+            unpoison_input(&input);
+        }
     }
 }

@@ -120,7 +120,7 @@ extern "C" fn main() {
 impl<R: Rng> Fazi<R> {
     /// Performs necessary tasks before sending the testcase off to the target
     pub fn start_iteration(&mut self) {
-        self.poison_input();
+        poison_input(self.input.as_ref());
         self.update_max_size();
     }
 
@@ -150,7 +150,7 @@ impl<R: Rng> Fazi<R> {
     /// bytes in the current input, update coverage, save the input if new
     /// coverage has been reached, and perform mutation for the next iteration.
     pub fn end_iteration(&mut self, need_more_data: bool) {
-        self.unpoison_input();
+        unpoison_input(self.input.as_ref());
 
         let (new_coverage, old_coverage) = update_coverage();
 
@@ -230,42 +230,6 @@ impl<R: Rng> Fazi<R> {
             eprintln!("iter: {}", self.iterations);
         }
     }
-
-    /// Marks all bytes of the input buffer's allocated data as addressable
-    pub(crate) fn unpoison_input(&mut self) {
-        let input_ptr = self.input.as_ptr();
-
-        if let Some(asan_unpoison) = asan_unpoison_memory_region_fn() {
-            unsafe {
-                asan_unpoison(input_ptr, self.input.capacity());
-            }
-        }
-
-        if let Some(msan_unpoison) = msan_unpoison_memory_region_fn() {
-            unsafe {
-                msan_unpoison(input_ptr, self.input.capacity());
-            }
-        }
-    }
-
-    /// Marks the difference between the input's buffer's length and capacity as
-    /// unaddressable
-    pub(crate) fn poison_input(&mut self) {
-        let unaddressable_bytes = self.input.capacity() - self.input.len();
-        let unaddressable_start = unsafe { self.input.as_ptr().offset(self.input.len() as isize) };
-
-        if let Some(asan_poison) = asan_poison_memory_region_fn() {
-            unsafe {
-                asan_poison(unaddressable_start, unaddressable_bytes);
-            }
-        }
-
-        if let Some(msan_unpoison) = msan_poison_memory_region_fn() {
-            unsafe {
-                msan_unpoison(unaddressable_start, unaddressable_bytes);
-            }
-        }
-    }
 }
 
 pub(crate) fn update_coverage() -> (usize, usize) {
@@ -322,5 +286,41 @@ fn ensure_parent_dir_exists(path: &Path) {
     let parent = path.parent().expect("path has no parent directory?");
     if !parent.exists() {
         std::fs::create_dir_all(parent).expect("failed to create_dir_all on parent directory");
+    }
+}
+
+/// Marks all bytes of the input buffer's allocated data as addressable
+pub(crate) fn unpoison_input(input: &Vec<u8>) {
+    let input_ptr = input.as_ptr();
+
+    if let Some(asan_unpoison) = asan_unpoison_memory_region_fn() {
+        unsafe {
+            asan_unpoison(input_ptr, input.capacity());
+        }
+    }
+
+    if let Some(msan_unpoison) = msan_unpoison_memory_region_fn() {
+        unsafe {
+            msan_unpoison(input_ptr, input.capacity());
+        }
+    }
+}
+
+/// Marks the difference between the input's buffer's length and capacity as
+/// unaddressable
+pub(crate) fn poison_input(input: &Vec<u8>) {
+    let unaddressable_bytes = input.capacity() - input.len();
+    let unaddressable_start = unsafe { input.as_ptr().offset(input.len() as isize) };
+
+    if let Some(asan_poison) = asan_poison_memory_region_fn() {
+        unsafe {
+            asan_poison(unaddressable_start, unaddressable_bytes);
+        }
+    }
+
+    if let Some(msan_unpoison) = msan_poison_memory_region_fn() {
+        unsafe {
+            msan_unpoison(unaddressable_start, unaddressable_bytes);
+        }
     }
 }
