@@ -4,8 +4,20 @@
 
 A reimplementation of libfuzzer in Rust
 
-## Usage
+## Supported Features
 
+- [x] libFuzzer's mutations
+- [x] SanCov feedback
+- [x] Building without a `main()` entry point
+- [x] Crash replaying
+- [x] Recoverage
+- [ ] Forking support
+- [ ] Timeout detection
+- [ ] Custom dictionaries
+
+Anything else that's missing from [libFuzzer's featureset](https://www.llvm.org/docs/LibFuzzer.html#options) will likely not be supported. Feel free to file an issue if you'd like to voice support for something.
+
+## Usage
 
 Step 1: Build fazi:
 
