@@ -10,6 +10,14 @@ pub(crate) struct Dictionary {
     pub u64dict: BTreeMap<usize, u64>,
 }
 
+#[derive(Debug)]
+pub(crate) enum DictionaryEntry {
+    U8(usize, u8),
+    U16(usize, u16),
+    U32(usize, u32),
+    U64(usize, u64),
+}
+
 static INTERESTING_NUMBERS_U8: &'static [u8] = &[
     std::u8::MIN,
     std::u8::MAX,

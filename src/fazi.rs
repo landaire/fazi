@@ -5,7 +5,11 @@ use std::{
     sync::{atomic::Ordering, Arc},
 };
 
-use crate::{dictionary::Dictionary, options::RuntimeOptions};
+use crate::{
+    dictionary::{Dictionary, DictionaryEntry},
+    driver::{TARGET_PC_COUNTER, TESTCASE_COVERAGE},
+    options::RuntimeOptions,
+};
 
 use crate::driver::{
     poison_input, unpoison_input, update_coverage, COMPARISON_OPERANDS, COVERAGE, FAZI_INITIALIZED,
@@ -22,8 +26,10 @@ pub struct Fazi<R: Rng> {
     pub(crate) rng: R,
     /// Current input
     pub(crate) input: Arc<Vec<u8>>,
-    /// Dictionary of SanCov comparison operands we've observed
+    /// Dictionary of SanCov comparison operands we've observed for the current session
     pub(crate) dictionary: Dictionary,
+    /// Dictionary of SanCov comparison operands we've observed for the current input
+    pub(crate) last_dictionary_input: Option<DictionaryEntry>,
     /// All inputs in our fuzzer corpus
     pub(crate) corpus: Vec<Arc<Vec<u8>>>,
     /// Our runtime configuration
@@ -53,6 +59,7 @@ impl Default for Fazi<StdRng> {
             rng: StdRng::from_entropy(),
             input: Default::default(),
             dictionary: Default::default(),
+            last_dictionary_input: None,
             corpus: Default::default(),
             options: Default::default(),
             iterations: 0,
@@ -95,6 +102,7 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             rng: R::from_entropy(),
             input: Default::default(),
             dictionary: Default::default(),
+            last_dictionary_input: None,
             corpus: Default::default(),
             options: Default::default(),
             iterations: 0,

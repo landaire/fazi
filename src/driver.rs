@@ -9,14 +9,14 @@ use crate::{
     options::RuntimeOptions,
     sancov::{CoverageMap, PcEntry},
     weak_imports::*,
-    Fazi,
+    Fazi, dictionary::DictionaryEntry,
 };
 use std::{
     collections::HashSet,
     lazy::SyncOnceCell,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, AtomicU8, Ordering},
+        atomic::{AtomicBool, AtomicU8, Ordering, AtomicPtr, AtomicUsize},
         Arc, Mutex,
     }, thread,
 };
@@ -170,6 +170,16 @@ impl<R: Rng> Fazi<R> {
                 old_coverage, new_coverage, self.mutations
             );
 
+            // Check if this new coverage was the result of a dictionary entry
+            if let Some(entry) = self.last_dictionary_input.take() {
+                match entry {
+                    DictionaryEntry::U8(offset, val) => { self.dictionary.u8dict.insert(offset, val); },
+                    DictionaryEntry::U16(offset, val) => { self.dictionary.u16dict.insert(offset, val); },
+                    DictionaryEntry::U32(offset, val) => { self.dictionary.u32dict.insert(offset, val); },
+                    DictionaryEntry::U64(offset, val) => { self.dictionary.u64dict.insert(offset, val); },
+                }
+            }
+
             self.corpus.push(self.input.clone());
 
             let input = self.input.clone();
@@ -214,6 +224,13 @@ impl<R: Rng> Fazi<R> {
         } else {
             self.mutate_input()
         };
+        let mut constants = COMPARISON_OPERANDS
+            .get()
+            .expect("failed to get CONSTANTS")
+            .lock()
+            .expect("failed to lock CONSTANTS");
+        constants.clear();
+        drop(constants);
         self.mutations.push(mutation);
         self.current_mutation_depth += 1;
 

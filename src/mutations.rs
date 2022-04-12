@@ -8,6 +8,7 @@ use rand::{
 };
 
 use crate::{driver::COMPARISON_OPERANDS, Fazi};
+use crate::dictionary::DictionaryEntry;
 
 type MutationResult = Result<(), ()>;
 
@@ -446,10 +447,23 @@ impl<R: Rng> Fazi<R> {
             .lock()
             .expect("failed to lock CONSTANTS");
 
+        let use_const_dynamic_pair = self.rng.gen_bool(0.90);
+
         macro_rules! change_int {
             ($ty:ty, $covmap:ident, $dictmap:ident, $next_choice:expr) => {
                 let ty_size = std::mem::size_of::<$ty>();
-                if constants.$covmap.is_empty() {
+                // Select a random pair
+                let cmp_pair = constants
+                    .$covmap
+                    .iter()
+                    .filter(|c| if use_const_dynamic_pair {
+                        (c.0.is_dynamic() && c.1.is_const()) || (c.0.is_const() && c.1.is_dynamic())
+                    } else {
+                        c.0.is_dynamic() || c.1.is_dynamic()
+                    })
+                    .choose(&mut self.rng);
+
+                if cmp_pair.is_none() {
                     if let Some(next_choice) = $next_choice {
                         choice = next_choice;
                         continue;
@@ -459,13 +473,7 @@ impl<R: Rng> Fazi<R> {
                     }
                 }
 
-                // Select a random pair
-                let cmp_pair = constants
-                    .$covmap
-                    .iter()
-                    .filter(|c| c.0.is_dynamic() || c.1.is_dynamic())
-                    .choose(&mut self.rng)
-                    .expect("u8cov empty?");
+                let cmp_pair = cmp_pair.unwrap();
 
                 let is_big_endian_input = self.rng.gen();
                 // Randomly select an index from the input to start our search
@@ -520,7 +528,15 @@ impl<R: Rng> Fazi<R> {
 
                     input[idx..idx + ty_size].copy_from_slice(new_value.as_slice());
 
-                    self.dictionary.$dictmap.insert(idx, const_value);
+                    let dict_entry = match ty_size {
+                        1 => DictionaryEntry::U8(idx, const_value.try_into().unwrap()),
+                        2 => DictionaryEntry::U16(idx, const_value.try_into().unwrap()),
+                        4 => DictionaryEntry::U32(idx, const_value.try_into().unwrap()),
+                        8 => DictionaryEntry::U64(idx, const_value.try_into().unwrap()),
+                        _ => unreachable!()
+                    };
+
+                    self.last_dictionary_input = Some(dict_entry);
 
                     let cmp_pair = cmp_pair.clone();
                     constants.$covmap.remove(&cmp_pair);
