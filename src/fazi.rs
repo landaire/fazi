@@ -136,18 +136,22 @@ impl<R: Rng + SeedableRng> Fazi<R> {
     /// Iterate over the inputs read from disk and replay them back.
     pub fn perform_recoverage(&mut self, callback: impl Fn(&[u8])) {
         for input in self.recoverage_queue.drain(..) {
-            update_coverage();
-
             poison_input(&input);
 
             (callback)(input.as_slice());
 
             unpoison_input(&input);
         }
+
+        update_coverage();
     }
 
     /// Iterate over the inputs read from disk and replay them back.
     pub fn fuzz(&mut self, callback: impl Fn(&[u8])) {
+        // Ensure we update our coverage numbers to avoid misattributing any noise
+        // that may have occurred before we started fuzzing
+        update_coverage();
+
         loop {
             self.start_iteration();
 

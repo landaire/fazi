@@ -230,9 +230,15 @@ macro_rules! handle_cmp {
         let constants = COMPARISON_OPERANDS
             .get()
             .expect("constants global not initialized");
-        let mut constants = constants
-            .lock()
-            .expect("failed to lock COMPARISON_OPERANDS global");
+        let constants = constants
+            .try_lock();
+        // We may have failed to lock if the Fazi harness locked the code,
+        // entered some stdlib code that's instrumented, which calls back
+        // into here...
+        if constants.is_err() {
+            return;
+        }
+        let mut constants = constants.unwrap();
 
         let sizeof_type = std::mem::size_of::<$ty>();
 
