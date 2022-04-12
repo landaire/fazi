@@ -24,7 +24,7 @@ impl PcEntry {
 
 extern "C" {
     #[link_name = "llvm.returnaddress"]
-    fn return_address(a: i32) -> *const u8;
+    pub(crate) fn return_address(a: i32) -> *const u8;
 }
 
 macro_rules! caller_address {
@@ -32,6 +32,7 @@ macro_rules! caller_address {
         unsafe { return_address(0) as usize }
     };
 }
+pub(crate) use caller_address as caller_address;
 
 #[derive(Debug, Clone)]
 pub(crate) enum CmpOperand<T: Clone> {
@@ -118,7 +119,7 @@ impl<T: Ord + Clone> Ord for CmpOperand<T> {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct CoverageMap {
+pub(crate) struct ComparisonOperandMap {
     pub u8cov: BTreeSet<(CmpOperand<u8>, CmpOperand<u8>)>,
     pub u16cov: BTreeSet<(CmpOperand<u16>, CmpOperand<u16>)>,
     pub u32cov: BTreeSet<(CmpOperand<u32>, CmpOperand<u32>)>,
@@ -126,7 +127,7 @@ pub(crate) struct CoverageMap {
     pub binary: HashSet<(Vec<u8>, Vec<u8>)>,
 }
 
-impl CoverageMap {
+impl ComparisonOperandMap {
     pub fn clear(&mut self) {
         self.u8cov.clear();
         self.u16cov.clear();
@@ -516,14 +517,13 @@ extern "C" fn __sanitizer_cov_trace_gep(_idx: *const std::ffi::c_void) {
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_weak_hook_memcmp(
-    caller_pc: *const std::ffi::c_void,
+pub(crate) extern "C" fn __sanitizer_weak_hook_memcmp(
+    caller_pc: usize,
     s1: *const libc::c_char,
     s2: *const libc::c_char,
     n: usize,
     result: std::os::raw::c_int,
 ) {
-    let caller_pc = caller_pc as usize;
     TESTCASE_COVERAGE
         .get()
         .expect("failed to get TESTCASE_COVERAGE")
@@ -556,7 +556,7 @@ extern "C" fn __sanitizer_weak_hook_memcmp(
 
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_strncmp(
-    caller_pc: *const std::ffi::c_void,
+    caller_pc: usize,
     _s1: *const std::ffi::c_void,
     _s2: *const std::ffi::c_void,
     _n: usize,
@@ -581,7 +581,7 @@ extern "C" fn __sanitizer_weak_hook_strncmp(
 
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_strcmp(
-    caller_pc: *const std::ffi::c_void,
+    caller_pc: usize,
     s1: *const libc::c_char,
     s2: *const libc::c_char,
     result: std::os::raw::c_int,
@@ -596,7 +596,7 @@ extern "C" fn __sanitizer_weak_hook_strcmp(
 
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_strncasecmp(
-    caller_pc: *const std::ffi::c_void,
+    caller_pc: usize,
     _s1: *const std::ffi::c_void,
     _s2: *const std::ffi::c_void,
     _n: usize,
@@ -616,7 +616,7 @@ extern "C" fn __sanitizer_weak_hook_strncasecmp(
 
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_strcasecmp(
-    _caller_pc: *const std::ffi::c_void,
+    _caller_pc: usize,
     _s1: *const std::ffi::c_void,
     _s2: *const std::ffi::c_void,
     _result: std::os::raw::c_int,
@@ -634,7 +634,7 @@ extern "C" fn __sanitizer_weak_hook_strcasecmp(
 
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_strstr(
-    caller_pc: *const std::ffi::c_void,
+    caller_pc: usize,
     _s1: *const std::ffi::c_void,
     _s2: *const std::ffi::c_void,
     _result: std::os::raw::c_int,
@@ -652,7 +652,7 @@ extern "C" fn __sanitizer_weak_hook_strstr(
 
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_strcasestr(
-    caller_pc: *const std::ffi::c_void,
+    caller_pc: usize,
     _s1: *const std::ffi::c_void,
     _s2: *const std::ffi::c_void,
     _result: std::os::raw::c_int,
@@ -670,7 +670,7 @@ extern "C" fn __sanitizer_weak_hook_strcasestr(
 
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_memmem(
-    caller_pc: *const std::ffi::c_void,
+    caller_pc: usize,
     _s1: *const std::ffi::c_void,
     _len1: usize,
     _s2: *const std::ffi::c_void,

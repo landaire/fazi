@@ -25,6 +25,9 @@ fn main() {
 
 #[inline(never)]
 fn buggy_function(input: &[u8]) {
+    if input == (b"hello").as_slice() {
+        panic!("fuzzer has succeeded at finding our bug, likely from instrumenting memcmp()");
+    }
     if input.len() >= 5
         && input[0] == b'h'
         && input[1] == b'e'
@@ -32,6 +35,6 @@ fn buggy_function(input: &[u8]) {
         && input[3] == b'l'
         && input[4] == b'o'
     {
-        panic!("fuzzer has succeded at finding our bug");
+        panic!("fuzzer has succeded at finding our bug, likely from instrumenting single-byte comparisons");
     }
 }

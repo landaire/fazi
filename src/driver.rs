@@ -8,9 +8,9 @@ use crate::{
     dictionary::DictionaryEntry,
     exports::fazi_initialize,
     options::RuntimeOptions,
-    sancov::{CoverageMap, PcEntry},
+    sancov::{ComparisonOperandMap, PcEntry},
     weak_imports::*,
-    Fazi,
+    Fazi, Input,
 };
 use std::{
     collections::HashSet,
@@ -27,7 +27,7 @@ use clap::StructOpt;
 use crate::options::Command;
 
 /// Global map of comparison operands from SanCov instrumentation
-pub(crate) static COMPARISON_OPERANDS: SyncOnceCell<Mutex<CoverageMap>> = SyncOnceCell::new();
+pub(crate) static COMPARISON_OPERANDS: SyncOnceCell<Mutex<ComparisonOperandMap>> = SyncOnceCell::new();
 /// Set of PCs that the fuzzer has reached
 pub(crate) static COVERAGE: SyncOnceCell<Mutex<HashSet<usize>>> = SyncOnceCell::new();
 /// Set of PCs that the fuzzer has reached for this testcase
@@ -155,7 +155,7 @@ impl<R: Rng> Fazi<R> {
     pub fn end_iteration(&mut self, need_more_data: bool) {
         unpoison_input(self.input.as_ref());
 
-        let (new_coverage, old_coverage) = update_coverage();
+        let (new_coverage, old_coverage, input_coverage) = update_coverage();
 
         if !need_more_data {
             let min_input_size = if let Some(min_input_size) = self.min_input_size {
@@ -190,10 +190,16 @@ impl<R: Rng> Fazi<R> {
                     DictionaryEntry::U64(offset, val) => {
                         self.dictionary.u64dict.insert(offset, val);
                     }
+                    DictionaryEntry::Binary(offset, val) => {
+                        self.dictionary.binary_dict.insert(offset, val);
+                    }
                 }
             }
 
-            self.corpus.push(self.input.clone());
+            self.corpus.push(Input {
+                coverage: input_coverage,
+                data: self.input.clone(),
+            });
 
             let input = self.input.clone();
             let corpus_dir = self.options.corpus_dir.clone();
@@ -206,13 +212,17 @@ impl<R: Rng> Fazi<R> {
         } else if self.current_mutation_depth == self.options.max_mutation_depth
             && (!need_more_data || !can_request_more_data)
         {
-            if let Some(input) = self
-                .corpus
-                .iter()
-                .filter(|input| input.len() >= self.min_input_size.unwrap_or(0))
-                .choose(&mut self.rng)
-            {
-                self.input = input.clone();
+            let next_input = if self.rng.gen_bool(0.75) {
+                self.corpus.peek()
+            } else {
+                self.corpus
+                    .iter()
+                    .filter(|input| input.data.len() >= self.min_input_size.unwrap_or(0))
+                    .choose(&mut self.rng)
+            };
+
+            if let Some(input) = next_input {
+                self.input = input.data.clone();
                 self.current_mutation_depth = 0;
                 self.mutations.clear();
 
@@ -255,7 +265,7 @@ impl<R: Rng> Fazi<R> {
     }
 }
 
-pub(crate) fn update_coverage() -> (usize, usize) {
+pub(crate) fn update_coverage() -> (usize, usize, usize) {
     let mut coverage = COVERAGE
         .get()
         .expect("failed to get COVERAGE")
@@ -268,6 +278,7 @@ pub(crate) fn update_coverage() -> (usize, usize) {
         .lock()
         .expect("failed to lock TESTCASE_COVERAGE");
 
+    let mut input_coverage = testcase_coverage.len();
     let old_coverage = coverage.len();
     let u8_counters = U8_COUNTERS
         .get()
@@ -285,13 +296,14 @@ pub(crate) fn update_coverage() -> (usize, usize) {
                 let pc_info = &module_pc_info[module_idx][counter_idx];
                 coverage.insert(pc_info.pc);
                 counter.store(0, Ordering::Relaxed);
+                input_coverage += 1;
             }
         }
     }
 
     coverage.extend(testcase_coverage.drain());
 
-    (coverage.len(), old_coverage)
+    (coverage.len(), old_coverage, input_coverage)
 }
 
 pub(crate) fn handle_crash(crashes_dir: &Path, input: &[u8]) {

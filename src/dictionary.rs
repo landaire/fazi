@@ -8,6 +8,7 @@ pub(crate) struct Dictionary {
     pub u16dict: BTreeMap<usize, u16>,
     pub u32dict: BTreeMap<usize, u32>,
     pub u64dict: BTreeMap<usize, u64>,
+    pub binary_dict: BTreeMap<usize, Vec<u8>>,
 }
 
 #[derive(Debug)]
@@ -16,6 +17,7 @@ pub(crate) enum DictionaryEntry {
     U16(usize, u16),
     U32(usize, u32),
     U64(usize, u64),
+    Binary(usize, Vec<u8>),
 }
 
 static INTERESTING_NUMBERS_U8: &'static [u8] = &[

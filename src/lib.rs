@@ -11,6 +11,8 @@ mod driver;
 pub mod exports;
 /// Main Fazi state management code
 mod fazi;
+/// Function hooks for builtin functions
+mod hooks;
 /// Main mutation logic
 mod mutations;
 /// Runtime configuration options

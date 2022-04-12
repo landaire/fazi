@@ -4,6 +4,7 @@ use rand::{
     prelude::{IteratorRandom, SliceRandom},
     Rng,
 };
+use sha1::digest::typenum::Integer;
 
 use crate::dictionary::DictionaryEntry;
 use crate::{driver::COMPARISON_OPERANDS, Fazi};
@@ -423,10 +424,18 @@ impl<R: Rng> Fazi<R> {
             U16,
             U32,
             U64,
+            Binary,
         }
 
         // We loop until we find an integer width that fits the size of the input
         let choices = [
+            IntegerWidth::U8,
+            IntegerWidth::U16,
+            IntegerWidth::U32,
+            IntegerWidth::U64,
+            IntegerWidth::Binary,
+        ];
+        let integer_choices = [
             IntegerWidth::U8,
             IntegerWidth::U16,
             IntegerWidth::U32,
@@ -566,6 +575,38 @@ impl<R: Rng> Fazi<R> {
                 IntegerWidth::U64 => {
                     change_int!(u64, u64cov, u64dict, Some(IntegerWidth::U32));
                 }
+                IntegerWidth::Binary => {
+                    if constants.binary.is_empty() {
+                        choice = integer_choices.as_slice().choose(&mut self.rng).expect("choices are empty?").clone();
+                        continue;
+                    }
+
+                    let binary_compare_target = constants.binary.iter().choose(&mut self.rng).expect("binary dictionary is empty?");
+
+                    // Try to find a byte slice that matches one of these arguments
+                    let mut found_match = None;
+                    for (idx, window) in self.input.windows(binary_compare_target.0.len()).enumerate() {
+                        if window == binary_compare_target.0 {
+                            found_match = Some((idx, binary_compare_target.1.clone()));
+                            break;
+                        }
+
+                        if window == binary_compare_target.1 {
+                            found_match = Some((idx, binary_compare_target.0.clone()));
+                            break;
+                        }
+                    }
+                    if let Some((idx, new_data)) = found_match {
+                        let input = self.input_mut();
+                        let old_data = &mut input[idx..idx+new_data.len()];
+                        old_data.copy_from_slice(new_data.as_slice());
+
+                        return Ok(());
+                    } else {
+                        choice = integer_choices.as_slice().choose(&mut self.rng).expect("choices are empty?").clone();
+                        continue;
+                    }
+                },
             }
         }
     }
@@ -734,11 +775,12 @@ impl<R: Rng> Fazi<R> {
         let target_input = Arc::make_mut(&mut self.input);
         let original_input = self
             .corpus
+            .iter()
             .choose(&mut self.rng)
             .expect("could not choose item from corpus");
 
         copy_helper(
-            &original_input,
+            &original_input.data,
             target_input,
             &mut self.rng,
             self.current_max_mutation_len,

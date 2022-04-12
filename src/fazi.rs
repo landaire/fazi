@@ -1,4 +1,5 @@
 use std::{
+    collections::BinaryHeap,
     fs, panic,
     path::{Path, PathBuf},
     sync::{atomic::Ordering, Arc},
@@ -19,6 +20,32 @@ use crate::mutations::MutationStrategy;
 use rand::{prelude::*, SeedableRng};
 use sha2::{Digest, Sha256};
 
+#[derive(Debug, Clone)]
+pub(crate) struct Input {
+    pub coverage: usize,
+    pub data: Arc<Vec<u8>>,
+}
+
+impl Eq for Input {}
+
+impl PartialEq for Input {
+    fn eq(&self, other: &Self) -> bool {
+        self.coverage == other.coverage
+    }
+}
+
+impl PartialOrd for Input {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.coverage.partial_cmp(&other.coverage)
+    }
+}
+
+impl Ord for Input {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.coverage.cmp(&other.coverage)
+    }
+}
+
 /// Main Fazi structure that holds our state.
 #[derive(Debug)]
 pub struct Fazi<R: Rng> {
@@ -30,7 +57,7 @@ pub struct Fazi<R: Rng> {
     /// Dictionary of SanCov comparison operands we've observed for the current input
     pub(crate) last_dictionary_input: Option<DictionaryEntry>,
     /// All inputs in our fuzzer corpus
-    pub(crate) corpus: Vec<Arc<Vec<u8>>>,
+    pub(crate) corpus: BinaryHeap<Input>,
     /// Our runtime configuration
     pub(crate) options: RuntimeOptions,
     /// Number of fuzz iterations performed
@@ -130,14 +157,17 @@ impl<R: Rng + SeedableRng> Fazi<R> {
                         continue;
                     }
 
-                    self.corpus.push(Arc::new(
-                        fs::read(input_file_path).expect("failed to read input file"),
-                    ));
+                    self.corpus.push(Input {
+                        coverage: 0,
+                        data: Arc::new(
+                            fs::read(input_file_path).expect("failed to read input file"),
+                        ),
+                    });
                 }
             }
         }
 
-        self.recoverage_queue = self.corpus.clone();
+        self.recoverage_queue = self.corpus.iter().map(|input| input.data.clone()).collect();
     }
 
     /// Iterate over the inputs read from disk and replay them back.

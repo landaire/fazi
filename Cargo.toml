@@ -25,8 +25,17 @@ sha1 = "0.10"
 sha2 = "0.10"
 
 [features]
-default = ["main_entrypoint"]
+default = ["main_entrypoint", "hook_builtins"]
 main_entrypoint = []
+hook_memcmp = []
+hook_bcmp = []
+hook_strncmp = []
+hook_strncasecmp = []
+hook_strcasecmp = []
+hook_strstr = []
+hook_strcasestr = []
+hook_memem = []
+hook_builtins = ["hook_memcmp", "hook_bcmp", "hook_strncmp", "hook_strncasecmp", "hook_strcasecmp", "hook_strstr", "hook_strcasestr", "hook_memem"]
 
 [[example]]
 name = "simple_harness"
