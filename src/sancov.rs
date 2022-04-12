@@ -32,7 +32,8 @@ macro_rules! caller_address {
         unsafe { return_address(0) as usize }
     };
 }
-pub(crate) use caller_address as caller_address;
+pub(crate) use caller_address;
+use libc::c_char;
 
 #[derive(Debug, Clone)]
 pub(crate) enum CmpOperand<T: Clone> {
@@ -516,13 +517,14 @@ extern "C" fn __sanitizer_cov_trace_gep(_idx: *const std::ffi::c_void) {
     //   fuzzer::TPC.HandleCmp(PC, Idx, (uintptr_t)0);
 }
 
-#[no_mangle]
-pub(crate) extern "C" fn __sanitizer_weak_hook_memcmp(
+pub(crate) fn memcmp_internal(
     caller_pc: usize,
     s1: *const libc::c_char,
+    s1_len: usize,
     s2: *const libc::c_char,
-    n: usize,
+    s2_len: usize,
     result: std::os::raw::c_int,
+    insert_null_terminator: bool,
 ) {
     TESTCASE_COVERAGE
         .get()
@@ -531,7 +533,7 @@ pub(crate) extern "C" fn __sanitizer_weak_hook_memcmp(
         .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
 
-    if result == 0 || n <= 1 {
+    if result == 0 || (s1_len <= 1 && s2_len <= 1) {
         // these testcases aren't interesting
         return;
     }
@@ -543,40 +545,38 @@ pub(crate) extern "C" fn __sanitizer_weak_hook_memcmp(
         .lock()
         .expect("failed to lock COMPARISON_OPERANDS global");
 
-    let s1 = unsafe { std::slice::from_raw_parts(s1 as *const u8, n) }.to_vec();
-    let s2 = unsafe { std::slice::from_raw_parts(s2 as *const u8, n) }.to_vec();
+    let mut s1 = unsafe { std::slice::from_raw_parts(s1 as *const u8, s1_len) }.to_vec();
+    let mut s2 = unsafe { std::slice::from_raw_parts(s2 as *const u8, s2_len) }.to_vec();
+    if insert_null_terminator {
+        s1.push(0);
+        s2.push(0);
+    }
 
     constants.binary.insert((s1, s2));
+}
 
-    //   if (!fuzzer::RunningUserCallback) return;
-    //   if (result == 0) return;  // No reason to mutate.
-    //   if (n <= 1) return;  // Not interesting.
-    //   fuzzer::TPC.AddValueForMemcmp(caller_pc, s1, s2, n, /*StopAtZero*/false);
+#[no_mangle]
+pub(crate) extern "C" fn __sanitizer_weak_hook_memcmp(
+    caller_pc: usize,
+    s1: *const libc::c_char,
+    s2: *const libc::c_char,
+    len: usize,
+    result: std::os::raw::c_int,
+) {
+    memcmp_internal(caller_pc, s1, len, s2, len, result, false);
 }
 
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_strncmp(
     caller_pc: usize,
-    _s1: *const std::ffi::c_void,
-    _s2: *const std::ffi::c_void,
-    _n: usize,
-    _result: std::os::raw::c_int,
+    s1: *const c_char,
+    s2: *const c_char,
+    len: usize,
+    result: std::os::raw::c_int,
 ) {
-    let caller_pc = caller_pc as usize;
-    TESTCASE_COVERAGE
-        .get()
-        .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE")
-        .insert(caller_pc);
-    //   if (!fuzzer::RunningUserCallback) return;
-    //   if (result == 0) return;  // No reason to mutate.
-    //   size_t Len1 = fuzzer::InternalStrnlen(s1, n);
-    //   size_t Len2 = fuzzer::InternalStrnlen(s2, n);
-    //   n = std::min(n, Len1);
-    //   n = std::min(n, Len2);
-    //   if (n <= 1) return;  // Not interesting.
-    //   fuzzer::TPC.AddValueForMemcmp(caller_pc, s1, s2, n, /*StopAtZero*/true);
+    let s1_len = strnlen(s1, len);
+    let s2_len = strnlen(s2, len);
+    memcmp_internal(caller_pc, s1, s1_len, s2,s2_len, result, true);
 }
 
 #[no_mangle]
@@ -586,7 +586,8 @@ extern "C" fn __sanitizer_weak_hook_strcmp(
     s2: *const libc::c_char,
     result: std::os::raw::c_int,
 ) {
-    __sanitizer_weak_hook_memcmp(caller_pc, s1, s2, strlen2(s1, s2), result)
+    let len = strlen2(s1, s2);
+    memcmp_internal(caller_pc, s1, len, s2, len, result, true);
     //   if (!fuzzer::RunningUserCallback) return;
     //   if (result == 0) return;  // No reason to mutate.
     //   size_t N = fuzzer::InternalStrnlen2(s1, s2);
@@ -597,18 +598,14 @@ extern "C" fn __sanitizer_weak_hook_strcmp(
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_strncasecmp(
     caller_pc: usize,
-    _s1: *const std::ffi::c_void,
-    _s2: *const std::ffi::c_void,
-    _n: usize,
-    _result: std::os::raw::c_int,
+    s1: *const libc::c_char,
+    s2: *const libc::c_char,
+    len: usize,
+    result: std::os::raw::c_int,
 ) {
-    let caller_pc = caller_pc as usize;
-    TESTCASE_COVERAGE
-        .get()
-        .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE")
-        .insert(caller_pc);
+    let s1_len = strnlen(s1, len);
+    let s2_len = strnlen(s2, len);
+    memcmp_internal(caller_pc, s1, s1_len, s2,s2_len, result, true);
 
     //   if (!fuzzer::RunningUserCallback) return;
     //   return __sanitizer_weak_hook_strncmp(called_pc, s1, s2, n, result);
@@ -616,18 +613,13 @@ extern "C" fn __sanitizer_weak_hook_strncasecmp(
 
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_strcasecmp(
-    _caller_pc: usize,
-    _s1: *const std::ffi::c_void,
-    _s2: *const std::ffi::c_void,
-    _result: std::os::raw::c_int,
+    caller_pc: usize,
+    s1: *const libc::c_char,
+    s2: *const libc::c_char,
+    result: std::os::raw::c_int,
 ) {
-    let caller_pc = caller_address!();
-    TESTCASE_COVERAGE
-        .get()
-        .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE")
-        .insert(caller_pc);
+    let len = strlen2(s1, s2);
+    memcmp_internal(caller_pc, s1, len, s2, len, result, true);
     //   if (!fuzzer::RunningUserCallback) return;
     //   return __sanitizer_weak_hook_strcmp(called_pc, s1, s2, result);
 }
@@ -635,17 +627,13 @@ extern "C" fn __sanitizer_weak_hook_strcasecmp(
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_strstr(
     caller_pc: usize,
-    _s1: *const std::ffi::c_void,
-    _s2: *const std::ffi::c_void,
-    _result: std::os::raw::c_int,
+    s1: *const libc::c_char,
+    s2: *const libc::c_char,
+    result: std::os::raw::c_int,
 ) {
-    let caller_pc = caller_pc as usize;
-    TESTCASE_COVERAGE
-        .get()
-        .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE")
-        .insert(caller_pc);
+    let s1_len = strlen(s1);
+    let s2_len = strlen(s2);
+    memcmp_internal(caller_pc, s1, s1_len, s2,s2_len, result, true);
     //   if (!fuzzer::RunningUserCallback) return;
     //   fuzzer::TPC.MMT.Add(reinterpret_cast<const uint8_t *>(s2), strlen(s2));
 }
@@ -653,17 +641,13 @@ extern "C" fn __sanitizer_weak_hook_strstr(
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_strcasestr(
     caller_pc: usize,
-    _s1: *const std::ffi::c_void,
-    _s2: *const std::ffi::c_void,
-    _result: std::os::raw::c_int,
+    s1: *const libc::c_char,
+    s2: *const libc::c_char,
+    result: std::os::raw::c_int,
 ) {
-    let caller_pc = caller_pc as usize;
-    TESTCASE_COVERAGE
-        .get()
-        .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE")
-        .insert(caller_pc);
+    let s1_len = strlen(s1);
+    let s2_len = strlen(s2);
+    memcmp_internal(caller_pc, s1, s1_len, s2,s2_len, result, true);
     //   if (!fuzzer::RunningUserCallback) return;
     //   fuzzer::TPC.MMT.Add(reinterpret_cast<const uint8_t *>(s2), strlen(s2));
 }
@@ -671,22 +655,37 @@ extern "C" fn __sanitizer_weak_hook_strcasestr(
 #[no_mangle]
 extern "C" fn __sanitizer_weak_hook_memmem(
     caller_pc: usize,
-    _s1: *const std::ffi::c_void,
-    _len1: usize,
-    _s2: *const std::ffi::c_void,
-    _len2: usize,
-    _result: std::os::raw::c_int,
+    s1: *const libc::c_char,
+    s1_len: usize,
+    s2: *const libc::c_char,
+    s2_len: usize,
+    result: std::os::raw::c_int,
 ) {
-    let caller_pc = caller_pc as usize;
-    TESTCASE_COVERAGE
-        .get()
-        .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE")
-        .insert(caller_pc);
+    memcmp_internal(caller_pc, s1, s1_len, s2, s2_len, result, true);
     //   if (!fuzzer::RunningUserCallback) return;
     //   fuzzer::TPC.MMT.Add(reinterpret_cast<const uint8_t *>(s2), len2);
 }
+
+/// Returns the minimum string length of the two arguments
+fn strlen(s: *const libc::c_char) -> usize {
+    let mut len = 0;
+    while unsafe { *s.offset(len) != 0 } {
+        len += 1;
+    }
+
+    return len.try_into().expect("failed to convert len to usize");
+}
+
+/// Returns the minimum string length of the two arguments
+fn strnlen(s: *const libc::c_char, max_len: usize) -> usize {
+    let mut len = 0;
+    while (len as usize) < max_len && unsafe { *s.offset(len) != 0 } {
+        len += 1;
+    }
+
+    return len.try_into().expect("failed to convert len to usize");
+}
+
 
 /// Returns the minimum string length of the two arguments
 fn strlen2(s1: *const libc::c_char, s2: *const libc::c_char) -> usize {
@@ -695,5 +694,5 @@ fn strlen2(s1: *const libc::c_char, s2: *const libc::c_char) -> usize {
         len += 1;
     }
 
-    return len.try_into().expect("failed to convert len to usze");
+    return len.try_into().expect("failed to convert len to usize");
 }
