@@ -29,6 +29,8 @@ use crate::options::Command;
 pub(crate) static COMPARISON_OPERANDS: SyncOnceCell<Mutex<CoverageMap>> = SyncOnceCell::new();
 /// Set of PCs that the fuzzer has reached
 pub(crate) static COVERAGE: SyncOnceCell<Mutex<HashSet<usize>>> = SyncOnceCell::new();
+/// Set of PCs that the fuzzer has reached for this testcase
+pub(crate) static TESTCASE_COVERAGE: SyncOnceCell<Mutex<HashSet<usize>>> = SyncOnceCell::new();
 /// The global [`Fazi`] instance. We need to keep a global pointer as the SanCov and
 /// other C FFI entrypoints know nothing about us, but we need to access our
 /// current state
@@ -40,6 +42,8 @@ pub(crate) static FAZI_INITIALIZED: AtomicBool = AtomicBool::new(false);
 pub(crate) static U8_COUNTERS: SyncOnceCell<Mutex<Vec<&'static [AtomicU8]>>> = SyncOnceCell::new();
 /// PC info corresponding to the U8 counters.
 pub(crate) static PC_INFO: SyncOnceCell<Mutex<Vec<&'static [PcEntry]>>> = SyncOnceCell::new();
+/// PC corresponding to our fuzz target
+pub(crate) static mut TARGET_PC_COUNTER: Option<&'static AtomicU8> = None;
 /// The most recent input that was used for fuzzing.
 /// SAFETY: This value should only ever be read from the [`signal::death_callback()`],
 /// at which point we are about to exit and the fuzzer loop should not be running,
@@ -120,6 +124,7 @@ impl<R: Rng> Fazi<R> {
         unsafe {
             LAST_INPUT = Some(self.input.clone());
         }
+        update_coverage();
     }
 
     /// Updates the maximum length that we can extend the input to
@@ -254,6 +259,19 @@ pub(crate) fn update_coverage() -> (usize, usize) {
         .lock()
         .expect("failed to lock COVERAGE");
 
+    if let Some(target_pc_counter) = unsafe { TARGET_PC_COUNTER } {
+        if target_pc_counter.load(Ordering::Relaxed) == 0 {
+            // No new coverage
+            return (coverage.len(), coverage.len());
+        }
+    }
+
+    let mut testcase_coverage = TESTCASE_COVERAGE
+        .get()
+        .expect("failed to get TESTCASE_COVERAGE")
+        .lock()
+        .expect("failed to lock TESTCASE_COVERAGE");
+
     let old_coverage = coverage.len();
     let u8_counters = U8_COUNTERS.get().expect("U8_COUNTERS not initialized").lock().expect("failed to lock U8_COUNTERS");
     let module_pc_info = PC_INFO.get().expect("PC_INFO not initialize").lock().expect("failed to lock PC_INFO");
@@ -262,9 +280,12 @@ pub(crate) fn update_coverage() -> (usize, usize) {
             if counter.load(Ordering::Relaxed) > 0 {
                 let pc_info = &module_pc_info[module_idx][counter_idx];
                 coverage.insert(pc_info.pc);
+                counter.store(0, Ordering::Relaxed);
             }
         }
     }
+
+    coverage.extend(testcase_coverage.drain());
 
     (coverage.len(), old_coverage)
 }

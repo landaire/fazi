@@ -187,6 +187,9 @@ impl<R: Rng + SeedableRng> Fazi<R> {
         COVERAGE
             .set(Default::default())
             .expect("COVERAGE already initialized");
+        TESTCASE_COVERAGE
+            .set(Default::default())
+            .expect("TESTCASE_COVERAGE already initialized");
         U8_COUNTERS
             .set(Default::default())
             .expect("U8_COUNTERS already initialized");
@@ -334,6 +337,28 @@ impl<'a, R: Rng> FaziBuilder<'a, R> {
         fazi.restore_inputs();
 
         let callback = self.harness_callback.unwrap();
+        let u8_counters = U8_COUNTERS
+            .get()
+            .expect("U8_COUNTERS not initialized")
+            .lock()
+            .expect("failed to lock U8_COUNTERS");
+        let module_pc_info = PC_INFO
+            .get()
+            .expect("PC_INFO not initialize")
+            .lock()
+            .expect("failed to lock PC_INFO");
+        for (module_idx, pc_infos) in module_pc_info.iter().enumerate() {
+            for (entry_idx, pc_entry) in pc_infos.iter().enumerate() {
+                if pc_entry.pc == callback as *const _ as *const () as usize {
+                    unsafe {
+                        TARGET_PC_COUNTER =
+                            Some(std::mem::transmute(&u8_counters[module_idx][entry_idx]));
+                    }
+                }
+            }
+        }
+        drop(module_pc_info);
+        drop(u8_counters);
 
         if self.perform_recoverage {
             fazi.perform_recoverage(&callback);

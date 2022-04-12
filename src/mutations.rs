@@ -125,7 +125,6 @@ impl<R: Rng> Fazi<R> {
     pub(crate) fn mutate_input(&mut self) -> MutationStrategy {
         let mut mutation_strategy = MutationStrategy::random(&mut self.rng);
 
-        // println!("before: {:x?}", self.input);
         loop {
             let mutation_result = match mutation_strategy {
                 MutationStrategy::EraseBytes => self.erase_bytes(),
@@ -141,6 +140,7 @@ impl<R: Rng> Fazi<R> {
                 MutationStrategy::InsertDictionaryValue => self.insert_dictionary_value(),
                 MutationStrategy::UseCmpValue => self.use_value_from_cmp_instruction(),
             };
+
 
             if mutation_result.is_ok() {
                 // println!("Selected mutation strategy: {:?}", mutation_strategy);

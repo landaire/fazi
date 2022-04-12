@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    driver::{COMPARISON_OPERANDS, COVERAGE, PC_INFO, U8_COUNTERS},
+    driver::{COMPARISON_OPERANDS, TESTCASE_COVERAGE, PC_INFO, U8_COUNTERS},
     exports::fazi_initialize,
 };
 
@@ -140,11 +140,11 @@ impl CoverageMap {
 extern "C" fn __sanitizer_cov_trace_pc_guard(_guard: *const u32) {
     fazi_initialize();
     let caller_pc = caller_address!();
-    COVERAGE
+    TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
+        .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
     //   fuzzer::WarnAboutDeprecatedInstrumentation(
     //       "-fsanitize-coverage=trace-pc-guard");
@@ -153,11 +153,11 @@ extern "C" fn __sanitizer_cov_trace_pc_guard(_guard: *const u32) {
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_pc() {
     let caller_pc = caller_address!();
-    COVERAGE
+    TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
+        .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
     //   fuzzer::WarnAboutDeprecatedInstrumentation("-fsanitize-coverage=trace-pc");
 }
@@ -172,11 +172,16 @@ extern "C" fn __sanitizer_cov_8bit_counters_init(start: *mut u8, stop: *mut u8) 
         .lock()
         .expect("failed to lock U8_COUNTERS");
 
-    unsafe {
-        let counters =
-            std::slice::from_raw_parts(start as *mut AtomicU8, stop as usize - start as usize);
-        u8_counters.push(counters);
+     let counters = unsafe {
+            std::slice::from_raw_parts(start as *const AtomicU8, stop as usize - start as usize)
+    };
+
+    for other_counters in &*u8_counters {
+        if other_counters.as_ptr() == counters.as_ptr() {
+            return;
+        }
     }
+    u8_counters.push(counters);
 }
 
 #[no_mangle]
@@ -190,14 +195,20 @@ extern "C" fn __sanitizer_cov_pcs_init(
     // todo!()
     //   fuzzer::TPC.HandlePCsInit(pcs_beg, pcs_end);
     let mut module_pc_info = PC_INFO.get().expect("PC_INFO not initialize").lock().expect("failed to lock PC_INFO");
-    unsafe {
-        let pc_info = std::slice::from_raw_parts(
+    let pc_info = unsafe {
+        std::slice::from_raw_parts(
             pcs_beg as *const PcEntry,
-            pcs_end as usize - pcs_beg as usize,
-        );
+            (pcs_end as *const PcEntry).offset_from(pcs_beg as *const PcEntry) as usize,
+        )
+    };
 
-        module_pc_info.push(pc_info);
+    for known_pc_info in &*module_pc_info {
+        if known_pc_info.as_ptr() == pc_info.as_ptr() {
+            return;
+        }
     }
+
+    module_pc_info.push(pc_info);
 }
 
 #[no_mangle]
@@ -205,11 +216,11 @@ extern "C" fn __sanitizer_cov_trace_pc_indir(callee: *const std::ffi::c_void) {
     use std::collections::hash_map::DefaultHasher;
 
     let caller_pc = caller_address!();
-    let mut coverage = COVERAGE
+    let mut coverage = TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE");
+        .expect("failed to lock TESTCASE_COVERAGE");
 
     let mut s = DefaultHasher::new();
     s.write_usize(callee as usize);
@@ -288,11 +299,11 @@ extern "C" fn __sanitizer_cov_trace_cmp8(arg1: u64, arg2: u64) {
     handle_cmp!(CmpOperand::Dynamic(arg1), CmpOperand::Dynamic(arg2), u64);
 
     let caller_pc = caller_address!();
-    COVERAGE
+    TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
+        .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
 
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
@@ -307,11 +318,11 @@ extern "C" fn __sanitizer_cov_trace_const_cmp8(arg1: u64, arg2: u64) {
     handle_cmp!(CmpOperand::Constant(arg1), CmpOperand::Dynamic(arg2), u64);
 
     let caller_pc = caller_address!();
-    COVERAGE
+    TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
+        .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
 
     // todo!()
@@ -324,11 +335,11 @@ extern "C" fn __sanitizer_cov_trace_cmp4(arg1: u32, arg2: u32) {
     handle_cmp!(CmpOperand::Dynamic(arg1), CmpOperand::Dynamic(arg2), u32);
 
     let caller_pc = caller_address!();
-    COVERAGE
+    TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
+        .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
 
     // todo!()
@@ -341,11 +352,11 @@ extern "C" fn __sanitizer_cov_trace_const_cmp4(arg1: u32, arg2: u32) {
     handle_cmp!(CmpOperand::Constant(arg1), CmpOperand::Dynamic(arg2), u32);
 
     let caller_pc = caller_address!();
-    COVERAGE
+    TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
+        .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
 
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
@@ -357,11 +368,11 @@ extern "C" fn __sanitizer_cov_trace_cmp2(arg1: u16, arg2: u16) {
     handle_cmp!(CmpOperand::Dynamic(arg1), CmpOperand::Dynamic(arg2), u16);
 
     let caller_pc = caller_address!();
-    COVERAGE
+    TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
+        .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
 
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
@@ -373,11 +384,11 @@ extern "C" fn __sanitizer_cov_trace_const_cmp2(arg1: u16, arg2: u16) {
     handle_cmp!(CmpOperand::Constant(arg1), CmpOperand::Dynamic(arg2), u16);
 
     let caller_pc = caller_address!();
-    COVERAGE
+    TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
+        .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
 
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
@@ -389,11 +400,11 @@ extern "C" fn __sanitizer_cov_trace_cmp1(arg1: u8, arg2: u8) {
     handle_cmp!(CmpOperand::Dynamic(arg1), CmpOperand::Dynamic(arg2), u8);
 
     let caller_pc = caller_address!();
-    COVERAGE
+    TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
+        .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
 
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
@@ -405,11 +416,11 @@ extern "C" fn __sanitizer_cov_trace_const_cmp1(arg1: u8, arg2: u8) {
     handle_cmp!(CmpOperand::Constant(arg1), CmpOperand::Dynamic(arg2), u8);
 
     let caller_pc = caller_address!();
-    COVERAGE
+    TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
+        .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
 
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
@@ -464,11 +475,11 @@ extern "C" fn __sanitizer_cov_trace_switch(_val: u64, _cases: *const u64) {
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_div4(_val: u32) {
     let caller_pc = caller_address!();
-    COVERAGE
+    TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
+        .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Val, (uint32_t)0);
@@ -477,11 +488,11 @@ extern "C" fn __sanitizer_cov_trace_div4(_val: u32) {
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_div8(_val: u64) {
     let caller_pc = caller_address!();
-    COVERAGE
+    TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
+        .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Val, (uint64_t)0);
@@ -490,11 +501,11 @@ extern "C" fn __sanitizer_cov_trace_div8(_val: u64) {
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_gep(_idx: *const std::ffi::c_void) {
     let caller_pc = caller_address!();
-    COVERAGE
+    TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
+        .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
 
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
@@ -510,11 +521,11 @@ extern "C" fn __sanitizer_weak_hook_memcmp(
     result: std::os::raw::c_int,
 ) {
     let caller_pc = caller_pc as usize;
-    COVERAGE
+    TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
+        .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
 
     if result == 0 || n <= 1 {
@@ -549,11 +560,11 @@ extern "C" fn __sanitizer_weak_hook_strncmp(
     _result: std::os::raw::c_int,
 ) {
     let caller_pc = caller_pc as usize;
-    COVERAGE
+    TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
+        .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
     //   if (!fuzzer::RunningUserCallback) return;
     //   if (result == 0) return;  // No reason to mutate.
@@ -589,11 +600,11 @@ extern "C" fn __sanitizer_weak_hook_strncasecmp(
     _result: std::os::raw::c_int,
 ) {
     let caller_pc = caller_pc as usize;
-    COVERAGE
+    TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
+        .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
 
     //   if (!fuzzer::RunningUserCallback) return;
@@ -608,11 +619,11 @@ extern "C" fn __sanitizer_weak_hook_strcasecmp(
     _result: std::os::raw::c_int,
 ) {
     let caller_pc = caller_address!();
-    COVERAGE
+    TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
+        .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
     //   if (!fuzzer::RunningUserCallback) return;
     //   return __sanitizer_weak_hook_strcmp(called_pc, s1, s2, result);
@@ -626,11 +637,11 @@ extern "C" fn __sanitizer_weak_hook_strstr(
     _result: std::os::raw::c_int,
 ) {
     let caller_pc = caller_pc as usize;
-    COVERAGE
+    TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
+        .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
     //   if (!fuzzer::RunningUserCallback) return;
     //   fuzzer::TPC.MMT.Add(reinterpret_cast<const uint8_t *>(s2), strlen(s2));
@@ -644,11 +655,11 @@ extern "C" fn __sanitizer_weak_hook_strcasestr(
     _result: std::os::raw::c_int,
 ) {
     let caller_pc = caller_pc as usize;
-    COVERAGE
+    TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
+        .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
     //   if (!fuzzer::RunningUserCallback) return;
     //   fuzzer::TPC.MMT.Add(reinterpret_cast<const uint8_t *>(s2), strlen(s2));
@@ -664,11 +675,11 @@ extern "C" fn __sanitizer_weak_hook_memmem(
     _result: std::os::raw::c_int,
 ) {
     let caller_pc = caller_pc as usize;
-    COVERAGE
+    TESTCASE_COVERAGE
         .get()
-        .expect("failed to get COVERAGE")
+        .expect("failed to get TESTCASE_COVERAGE")
         .lock()
-        .expect("failed to lock COVERAGE")
+        .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
     //   if (!fuzzer::RunningUserCallback) return;
     //   fuzzer::TPC.MMT.Add(reinterpret_cast<const uint8_t *>(s2), len2);
