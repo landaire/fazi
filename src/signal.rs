@@ -1,6 +1,6 @@
-use std::{thread, path::Path, panic};
+use std::{thread, path::Path, panic::{self, PanicInfo}};
 
-use libc::SIGABRT;
+use libc::{SIGABRT};
 use rand::Rng;
 use signal_hook::iterator::Signals;
 
@@ -35,7 +35,18 @@ impl<R: Rng> Fazi<R> {
 
     pub fn setup_panic_hook(&self) {
         panic::set_hook(Box::new(|panic_info| {
-            eprintln!("{}", panic_info);
+            let thread = thread::current();
+            let name = thread.name().unwrap_or("<unnamed>");
+            let location = panic_info.location().unwrap();
+            let msg = match panic_info.payload().downcast_ref::<&'static str>() {
+                Some(s) => *s,
+                None => match panic_info.payload().downcast_ref::<String>() {
+                    Some(s) => &s[..],
+                    None => "Box<dyn Any>",
+                },
+            };
+            eprintln!("thread '{name}' panicked at '{msg}', {location}");
+
             death_callback();
         }));
     }
