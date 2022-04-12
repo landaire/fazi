@@ -195,13 +195,6 @@ impl<R: Rng> Fazi<R> {
 
             self.current_mutation_depth = 0;
             self.mutations.clear();
-
-            let mut constants = COMPARISON_OPERANDS
-                .get()
-                .expect("failed to get CONSTANTS")
-                .lock()
-                .expect("failed to lock CONSTANTS");
-            constants.clear();
         } else if self.current_mutation_depth == self.options.max_mutation_depth
             && (!need_more_data || !can_request_more_data)
         {
@@ -215,6 +208,8 @@ impl<R: Rng> Fazi<R> {
                 self.current_mutation_depth = 0;
                 self.mutations.clear();
 
+                // Clear the mutations here before we mutate this input -- we do this
+                // to avoid mixing offsets from the last testase with this one.
                 let mut constants = COMPARISON_OPERANDS
                     .get()
                     .expect("failed to get CONSTANTS")
