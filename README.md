@@ -93,7 +93,7 @@ The example pure Rust harness can be found at the [/examples/simple_harness.rs](
 To build/run it, clone the repo and run the following commands:
 
 ```bash
-cargo rustc --no-default-features --example simple_harness -- \
+cargo rustc --no-default-features --features=hook_builtins --example simple_harness -- \
     -Znew-llvm-pass-manager=no \
     -C passes=sancov \
     -C llvm-args=-sanitizer-coverage-level=3 \
