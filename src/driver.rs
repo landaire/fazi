@@ -5,20 +5,22 @@ use rand::{
 use sha1::{Digest, Sha1};
 
 use crate::{
+    dictionary::DictionaryEntry,
     exports::fazi_initialize,
     options::RuntimeOptions,
     sancov::{CoverageMap, PcEntry},
     weak_imports::*,
-    Fazi, dictionary::DictionaryEntry,
+    Fazi,
 };
 use std::{
     collections::HashSet,
     lazy::SyncOnceCell,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, AtomicU8, Ordering, AtomicPtr, AtomicUsize},
+        atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicUsize, Ordering},
         Arc, Mutex,
-    }, thread,
+    },
+    thread,
 };
 
 use clap::StructOpt;
@@ -42,8 +44,6 @@ pub(crate) static FAZI_INITIALIZED: AtomicBool = AtomicBool::new(false);
 pub(crate) static U8_COUNTERS: SyncOnceCell<Mutex<Vec<&'static [AtomicU8]>>> = SyncOnceCell::new();
 /// PC info corresponding to the U8 counters.
 pub(crate) static PC_INFO: SyncOnceCell<Mutex<Vec<&'static [PcEntry]>>> = SyncOnceCell::new();
-/// PC corresponding to our fuzz target
-pub(crate) static mut TARGET_PC_COUNTER: Option<&'static AtomicU8> = None;
 /// The most recent input that was used for fuzzing.
 /// SAFETY: This value should only ever be read from the [`signal::death_callback()`],
 /// at which point we are about to exit and the fuzzer loop should not be running,
@@ -141,7 +141,8 @@ impl<R: Rng> Fazi<R> {
                 let max_mutation_len = self.max_input_size;
                 let new_max_mutation_len =
                     max_mutation_len + (max_mutation_len_f64.log10() as usize);
-                self.max_input_size = std::cmp::min(new_max_mutation_len, self.options.max_input_len);
+                self.max_input_size =
+                    std::cmp::min(new_max_mutation_len, self.options.max_input_len);
             }
         }
 
@@ -178,10 +179,18 @@ impl<R: Rng> Fazi<R> {
             // Check if this new coverage was the result of a dictionary entry
             if let Some(entry) = self.last_dictionary_input.take() {
                 match entry {
-                    DictionaryEntry::U8(offset, val) => { self.dictionary.u8dict.insert(offset, val); },
-                    DictionaryEntry::U16(offset, val) => { self.dictionary.u16dict.insert(offset, val); },
-                    DictionaryEntry::U32(offset, val) => { self.dictionary.u32dict.insert(offset, val); },
-                    DictionaryEntry::U64(offset, val) => { self.dictionary.u64dict.insert(offset, val); },
+                    DictionaryEntry::U8(offset, val) => {
+                        self.dictionary.u8dict.insert(offset, val);
+                    }
+                    DictionaryEntry::U16(offset, val) => {
+                        self.dictionary.u16dict.insert(offset, val);
+                    }
+                    DictionaryEntry::U32(offset, val) => {
+                        self.dictionary.u32dict.insert(offset, val);
+                    }
+                    DictionaryEntry::U64(offset, val) => {
+                        self.dictionary.u64dict.insert(offset, val);
+                    }
                 }
             }
 
@@ -254,13 +263,6 @@ pub(crate) fn update_coverage() -> (usize, usize) {
         .lock()
         .expect("failed to lock COVERAGE");
 
-    if let Some(target_pc_counter) = unsafe { TARGET_PC_COUNTER } {
-        if target_pc_counter.load(Ordering::Relaxed) == 0 {
-            // No new coverage
-            return (coverage.len(), coverage.len());
-        }
-    }
-
     let mut testcase_coverage = TESTCASE_COVERAGE
         .get()
         .expect("failed to get TESTCASE_COVERAGE")
@@ -268,8 +270,16 @@ pub(crate) fn update_coverage() -> (usize, usize) {
         .expect("failed to lock TESTCASE_COVERAGE");
 
     let old_coverage = coverage.len();
-    let u8_counters = U8_COUNTERS.get().expect("U8_COUNTERS not initialized").lock().expect("failed to lock U8_COUNTERS");
-    let module_pc_info = PC_INFO.get().expect("PC_INFO not initialize").lock().expect("failed to lock PC_INFO");
+    let u8_counters = U8_COUNTERS
+        .get()
+        .expect("U8_COUNTERS not initialized")
+        .lock()
+        .expect("failed to lock U8_COUNTERS");
+    let module_pc_info = PC_INFO
+        .get()
+        .expect("PC_INFO not initialize")
+        .lock()
+        .expect("failed to lock PC_INFO");
     for (module_idx, module_counters) in u8_counters.iter().enumerate() {
         for (counter_idx, counter) in module_counters.iter().enumerate() {
             if counter.load(Ordering::Relaxed) > 0 {
