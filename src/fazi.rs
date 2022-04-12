@@ -1,5 +1,4 @@
 use std::{
-    collections::BTreeMap,
     fs, panic,
     path::{Path, PathBuf},
     sync::{atomic::Ordering, Arc},
@@ -7,7 +6,7 @@ use std::{
 
 use crate::{
     dictionary::{Dictionary, DictionaryEntry},
-    driver::{TESTCASE_COVERAGE},
+    driver::TESTCASE_COVERAGE,
     options::RuntimeOptions,
 };
 
@@ -16,7 +15,7 @@ use crate::driver::{
     PC_INFO, U8_COUNTERS,
 };
 use crate::mutations::MutationStrategy;
-use crate::signal::death_callback;
+
 use rand::{prelude::*, SeedableRng};
 use sha2::{Digest, Sha256};
 

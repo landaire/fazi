@@ -8,9 +8,7 @@ const CORPUS_DEFAULT_DIR: &'static str = "./corpus";
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// Reproduce some crash
-    Repro {
-        file_path: PathBuf,
-    },
+    Repro { file_path: PathBuf },
 }
 
 #[derive(Parser, Debug)]

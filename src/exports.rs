@@ -4,7 +4,9 @@ use std::{
 };
 
 use crate::{
-    driver::{update_coverage, COMPARISON_OPERANDS, COVERAGE, FAZI, FAZI_INITIALIZED, U8_COUNTERS, PC_INFO, LAST_INPUT},
+    driver::{
+        update_coverage, FAZI, FAZI_INITIALIZED,
+    },
     Fazi,
 };
 

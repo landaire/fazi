@@ -9,6 +9,8 @@ mod dictionary;
 mod driver;
 /// Exports for interfacing with Fazi via FFI
 pub mod exports;
+/// Main Fazi state management code
+mod fazi;
 /// Main mutation logic
 mod mutations;
 /// Runtime configuration options
@@ -21,7 +23,5 @@ mod signal;
 mod weak;
 /// Weakly linked imports
 mod weak_imports;
-/// Main Fazi state management code
-mod fazi;
 
 pub use fazi::*;

@@ -1,6 +1,6 @@
 use std::env;
 
-use fazi::{Fazi, FaziBuilder};
+use fazi::{FaziBuilder};
 use rand::prelude::StdRng;
 
 fn main() {
@@ -10,16 +10,17 @@ fn main() {
         .do_fuzzing() // Run the fuzzer after doing recoverage
         .harness(&buggy_function) // Our target function
         ;
-        let handle_panics = if let Some(env_var_value) = env::var_os("FAZI_PANIC_HANDLER") {
-            env_var_value != "off"
-        } else {
-            true
-        };
-        if handle_panics {
-            fazi.handle_panics()
-        } else {
-            fazi
-        }.run();
+    let handle_panics = if let Some(env_var_value) = env::var_os("FAZI_PANIC_HANDLER") {
+        env_var_value != "off"
+    } else {
+        true
+    };
+    if handle_panics {
+        fazi.handle_panics()
+    } else {
+        fazi
+    }
+    .run();
 }
 
 #[inline(never)]

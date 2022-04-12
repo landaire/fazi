@@ -17,10 +17,9 @@ use std::{
     lazy::SyncOnceCell,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU8, Ordering},
         Arc, Mutex,
     },
-    thread,
 };
 
 use clap::StructOpt;

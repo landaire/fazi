@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    driver::{COMPARISON_OPERANDS, TESTCASE_COVERAGE, PC_INFO, U8_COUNTERS},
+    driver::{COMPARISON_OPERANDS, PC_INFO, TESTCASE_COVERAGE, U8_COUNTERS},
     exports::fazi_initialize,
 };
 
@@ -172,8 +172,8 @@ extern "C" fn __sanitizer_cov_8bit_counters_init(start: *mut u8, stop: *mut u8) 
         .lock()
         .expect("failed to lock U8_COUNTERS");
 
-     let counters = unsafe {
-            std::slice::from_raw_parts(start as *const AtomicU8, stop as usize - start as usize)
+    let counters = unsafe {
+        std::slice::from_raw_parts(start as *const AtomicU8, stop as usize - start as usize)
     };
 
     for other_counters in &*u8_counters {
@@ -194,7 +194,11 @@ extern "C" fn __sanitizer_cov_pcs_init(
     // println!("{pcs_beg:p}, {pcs_end:p}");
     // todo!()
     //   fuzzer::TPC.HandlePCsInit(pcs_beg, pcs_end);
-    let mut module_pc_info = PC_INFO.get().expect("PC_INFO not initialize").lock().expect("failed to lock PC_INFO");
+    let mut module_pc_info = PC_INFO
+        .get()
+        .expect("PC_INFO not initialize")
+        .lock()
+        .expect("failed to lock PC_INFO");
     let pc_info = unsafe {
         std::slice::from_raw_parts(
             pcs_beg as *const PcEntry,
@@ -241,8 +245,7 @@ macro_rules! handle_cmp {
         let constants = COMPARISON_OPERANDS
             .get()
             .expect("constants global not initialized");
-        let constants = constants
-            .try_lock();
+        let constants = constants.try_lock();
         // We may have failed to lock if the Fazi harness locked the code,
         // entered some stdlib code that's instrumented, which calls back
         // into here...

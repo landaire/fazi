@@ -1,14 +1,12 @@
-use std::{
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use rand::{
     prelude::{IteratorRandom, SliceRandom},
     Rng,
 };
 
-use crate::{driver::COMPARISON_OPERANDS, Fazi};
 use crate::dictionary::DictionaryEntry;
+use crate::{driver::COMPARISON_OPERANDS, Fazi};
 
 type MutationResult = Result<(), ()>;
 
@@ -140,7 +138,6 @@ impl<R: Rng> Fazi<R> {
                 MutationStrategy::InsertDictionaryValue => self.insert_dictionary_value(),
                 MutationStrategy::UseCmpValue => self.use_value_from_cmp_instruction(),
             };
-
 
             if mutation_result.is_ok() {
                 // println!("Selected mutation strategy: {:?}", mutation_strategy);
@@ -456,10 +453,13 @@ impl<R: Rng> Fazi<R> {
                 let cmp_pair = constants
                     .$covmap
                     .iter()
-                    .filter(|c| if use_const_dynamic_pair {
-                        (c.0.is_dynamic() && c.1.is_const()) || (c.0.is_const() && c.1.is_dynamic())
-                    } else {
-                        c.0.is_dynamic() || c.1.is_dynamic()
+                    .filter(|c| {
+                        if use_const_dynamic_pair {
+                            (c.0.is_dynamic() && c.1.is_const())
+                                || (c.0.is_const() && c.1.is_dynamic())
+                        } else {
+                            c.0.is_dynamic() || c.1.is_dynamic()
+                        }
                     })
                     .choose(&mut self.rng);
 
@@ -533,7 +533,7 @@ impl<R: Rng> Fazi<R> {
                         2 => DictionaryEntry::U16(idx, const_value.try_into().unwrap()),
                         4 => DictionaryEntry::U32(idx, const_value.try_into().unwrap()),
                         8 => DictionaryEntry::U64(idx, const_value.try_into().unwrap()),
-                        _ => unreachable!()
+                        _ => unreachable!(),
                     };
 
                     self.last_dictionary_input = Some(dict_entry);

@@ -1,12 +1,17 @@
-use std::{thread, path::Path, panic::{self, PanicInfo}};
+use std::{
+    panic::{self},
+    path::Path,
+    thread,
+};
 
-use libc::{SIGABRT};
+use libc::SIGABRT;
 use rand::Rng;
 use signal_hook::iterator::Signals;
 
 use crate::{
-    driver::{handle_crash, save_input, LAST_INPUT, CRASHES_DIR, INPUTS_DIR},
-    Fazi, weak_imports::sanitizer_set_death_callback_fn,
+    driver::{handle_crash, save_input, CRASHES_DIR, INPUTS_DIR, LAST_INPUT},
+    weak_imports::sanitizer_set_death_callback_fn,
+    Fazi,
 };
 
 impl<R: Rng> Fazi<R> {
