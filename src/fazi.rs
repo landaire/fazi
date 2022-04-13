@@ -241,7 +241,7 @@ impl<R: Rng + SeedableRng> Fazi<R> {
         if let Some(recoverage_input) = self.last_recoverage_input.take() {
             for input in &mut self.restored_corpus {
                 if input.data.as_ptr() == recoverage_input.as_ptr() {
-                    let (_, _, input_coverage) = update_coverage();
+                    let (_, _, input_coverage, _) = update_coverage();
                     input.coverage = input_coverage;
                     break;
                 }

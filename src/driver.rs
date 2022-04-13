@@ -7,6 +7,7 @@ use sha1::{Digest, Sha1};
 use crate::{
     dictionary::DictionaryEntry,
     exports::fazi_initialize,
+    ipc::IpcMessage,
     options::RuntimeOptions,
     sancov::{ComparisonOperandMap, PcEntry},
     weak_imports::*,
@@ -45,6 +46,8 @@ pub(crate) static FAZI_INITIALIZED: AtomicBool = AtomicBool::new(false);
 pub(crate) static U8_COUNTERS: SyncOnceCell<Mutex<Vec<&'static [AtomicU8]>>> = SyncOnceCell::new();
 /// PC info corresponding to the U8 counters.
 pub(crate) static PC_INFO: SyncOnceCell<Mutex<Vec<&'static [PcEntry]>>> = SyncOnceCell::new();
+pub(crate) static IPC_QUEUE: SyncOnceCell<crossbeam_channel::Sender<IpcMessage>> =
+    SyncOnceCell::new();
 /// The most recent input that was used for fuzzing.
 /// SAFETY: This value should only ever be read from the [`signal::death_callback()`],
 /// at which point we are about to exit and the fuzzer loop should not be running,
@@ -106,6 +109,82 @@ extern "C" fn main() {
         }
     }
 
+    // Create our IPC primitives
+
+    use crossbeam_channel::unbounded;
+    use fork::Fork;
+
+    use crate::ipc::{
+        create_client, create_rebroadcast_client, create_rebroadcast_server_worker, create_server,
+        server_socket_paths,
+    };
+    let num_processes = if fazi.options.saturate_cores {
+        num_cpus::get()
+    } else {
+        fazi.options.cores
+    };
+
+    let mut is_parent = false;
+    let mut children = vec![];
+    let server_id = std::process::id();
+    let mut new_inputs_recv = None;
+    if num_processes > 1 {
+        for _ in 0..(num_processes - 1) {
+            match fork::fork() {
+                Ok(Fork::Parent(child)) => {
+                    children.push(child);
+                    is_parent = true;
+                }
+                Ok(Fork::Child) => {
+                    break;
+                }
+                Err(_) => {
+                    panic!("error occurred while forking!");
+                }
+            }
+        }
+
+        // Create our message queue
+        let (send, recv) = unbounded();
+        let (new_inputs_send, new_inputs_recv_queue) = unbounded();
+        new_inputs_recv = Some(new_inputs_recv_queue);
+
+        IPC_QUEUE.set(send).expect("IPC_QUEUE alerady initialized");
+        let mut senders = Vec::with_capacity(num_processes);
+        let mut receivers = Vec::with_capacity(num_processes);
+        for _ in 0..num_processes {
+            let (send, recv) = unbounded();
+            senders.push(Arc::new(send));
+            receivers.push(Arc::new(recv));
+        }
+
+        let (client_to_server_socket_path, rebroadcast_path) = server_socket_paths(server_id);
+        if client_to_server_socket_path.exists() {
+            std::fs::remove_file(&client_to_server_socket_path)
+                .expect("could not remove existing socket");
+        }
+        if rebroadcast_path.exists() {
+            std::fs::remove_file(&rebroadcast_path)
+                .expect("could not remove existing rebroadcast socket");
+        }
+
+        if is_parent {
+            create_server(
+                client_to_server_socket_path.as_ref(),
+                Arc::new(senders),
+                new_inputs_send,
+            )
+            .expect("failed to create server");
+            create_rebroadcast_server_worker(rebroadcast_path.as_ref(), Arc::new(receivers))
+                .expect("failed to create server");
+        } else {
+            create_client(client_to_server_socket_path.as_ref(), recv)
+                .expect("failed to create client");
+            create_rebroadcast_client(rebroadcast_path.as_ref(), new_inputs_send)
+                .expect("failed to create rebroadcast client");
+        }
+    }
+
     eprintln!("Performing fuzzing");
 
     fazi.fuzz(|input| {
@@ -159,7 +238,7 @@ impl<R: Rng> Fazi<R> {
     pub fn end_iteration(&mut self, need_more_data: bool) {
         unpoison_input(self.input.as_ref());
 
-        let (new_coverage, old_coverage, input_coverage) = update_coverage();
+        let (new_coverage, old_coverage, input_coverage, new_pcs) = update_coverage();
 
         if !need_more_data {
             let min_input_size = if let Some(min_input_size) = self.min_input_size {
@@ -211,7 +290,13 @@ impl<R: Rng> Fazi<R> {
             let extension = extension.map(|e| e.as_ref());
 
             std::thread::spawn(move || {
-                save_input(corpus_dir.as_ref(), extension, input.as_slice());
+                let filename = save_input(corpus_dir.as_ref(), extension, input.as_slice());
+
+                if let Some(ipc_sender) = IPC_QUEUE.get() {
+                    ipc_sender
+                        .send(IpcMessage::NewCoverage(filename, input_coverage, new_pcs))
+                        .expect("failed to add to IPC queue");
+                }
             });
 
             self.current_mutation_depth = 0;
@@ -274,13 +359,8 @@ impl<R: Rng> Fazi<R> {
     }
 }
 
-pub(crate) fn update_coverage() -> (usize, usize, usize) {
-    let mut coverage = COVERAGE
-        .get()
-        .expect("failed to get COVERAGE")
-        .lock()
-        .expect("failed to lock COVERAGE");
-
+pub(crate) fn update_coverage() -> (usize, usize, usize, Vec<usize>) {
+    let mut coverage = coverage_map().lock().expect("failed to lock coverage map");
     let mut testcase_coverage = TESTCASE_COVERAGE
         .get()
         .expect("failed to get TESTCASE_COVERAGE")
@@ -299,20 +379,28 @@ pub(crate) fn update_coverage() -> (usize, usize, usize) {
         .expect("PC_INFO not initialize")
         .lock()
         .expect("failed to lock PC_INFO");
+    let mut new_pcs = vec![];
     for (module_idx, module_counters) in u8_counters.iter().enumerate() {
         for (counter_idx, counter) in module_counters.iter().enumerate() {
             if counter.load(Ordering::Relaxed) > 0 {
                 let pc_info = &module_pc_info[module_idx][counter_idx];
-                coverage.insert(pc_info.pc);
+                if coverage.insert(pc_info.pc) {
+                    new_pcs.push(pc_info.pc);
+                }
+
                 counter.store(0, Ordering::Relaxed);
                 input_coverage += 1;
             }
         }
     }
 
-    coverage.extend(testcase_coverage.drain());
+    for pc in testcase_coverage.drain() {
+        if coverage.insert(pc) {
+            new_pcs.push(pc);
+        }
+    }
 
-    (coverage.len(), old_coverage, input_coverage)
+    (coverage.len(), old_coverage, input_coverage, new_pcs)
 }
 
 pub(crate) fn handle_crash(crashes_dir: &Path, extension: Option<&str>, input: &[u8]) {
@@ -331,7 +419,7 @@ pub(crate) fn handle_crash(crashes_dir: &Path, extension: Option<&str>, input: &
     std::fs::write(crash_file_path, input).expect("failed to save crash file!");
 }
 
-pub(crate) fn save_input(corpus_dir: &Path, extension: Option<&str>, input: &[u8]) {
+pub(crate) fn save_input(corpus_dir: &Path, extension: Option<&str>, input: &[u8]) -> String {
     let mut hasher = Sha1::new();
     hasher.update(input);
     let result = hasher.finalize();
@@ -345,6 +433,8 @@ pub(crate) fn save_input(corpus_dir: &Path, extension: Option<&str>, input: &[u8
     ensure_parent_dir_exists(corpus_file_path.as_ref());
 
     std::fs::write(corpus_file_path, input).expect("failed to save corpus input file!");
+
+    filename
 }
 
 /// Ensures that the parent directory of `path` exists. If it does not, we will
@@ -389,5 +479,15 @@ pub(crate) fn poison_input(input: &Vec<u8>) {
         unsafe {
             msan_unpoison(unaddressable_start, unaddressable_bytes);
         }
+    }
+}
+
+pub(crate) fn coverage_map() -> &'static Mutex<HashSet<usize>> {
+    COVERAGE.get().expect("COVERAGE_MAP")
+}
+
+pub(crate) fn try_insert_coverage_pc(pc: usize) {
+    if let Ok(mut coverage_map) = coverage_map().try_lock() {
+        coverage_map.insert(pc);
     }
 }

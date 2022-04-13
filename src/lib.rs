@@ -25,5 +25,7 @@ mod signal;
 mod weak;
 /// Weakly linked imports
 mod weak_imports;
+/// Data that is shared between worker processes
+mod ipc;
 
-pub use fazi::*;
+pub use crate::fazi::*;

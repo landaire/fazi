@@ -48,6 +48,14 @@ pub struct RuntimeOptions {
     #[clap(long)]
     pub artifact_extension: Option<String>,
 
+    /// Number of cores to scale to
+    #[clap(long, default_value = "1")]
+    pub cores: usize,
+
+    /// Saturate
+    #[clap(long)]
+    pub saturate_cores: bool,
+
     #[clap(subcommand)]
     pub command: Option<Command>,
 }
@@ -62,6 +70,8 @@ impl Default for RuntimeOptions {
             max_input_len: 65000,
             max_iters: None,
             seed: None,
+            cores: 1,
+            saturate_cores: true,
             command: None,
             artifact_extension: None,
         }

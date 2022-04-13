@@ -47,7 +47,7 @@ $ ./a.out
 
 You can list command-line options with the `--help` flag:
 
-```
+```no_run
 fazi
 
 USAGE:
