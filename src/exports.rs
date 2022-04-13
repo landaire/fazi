@@ -4,9 +4,7 @@ use std::{
 };
 
 use crate::{
-    driver::{
-        update_coverage, FAZI, FAZI_INITIALIZED,
-    },
+    driver::{update_coverage, FAZI, FAZI_INITIALIZED},
     Fazi,
 };
 

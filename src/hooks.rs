@@ -33,6 +33,30 @@ extern "C" fn memcmp(s1: *const libc::c_char, s2: *const libc::c_char, count: us
     result
 }
 
+#[no_mangle]
+#[cfg(feature = "hook_bcmp")]
+extern "C" fn bcmp(s1: *const libc::c_char, s2: *const libc::c_char, count: usize) -> c_int {
+    let caller_pc = caller_address!();
+    let real_memcmp = match MEMCMP_ADDRESS.get() {
+        Some(&real_memcmp) => real_memcmp,
+        None => {
+            // We can fail to set `MEMCMP_ADDRESS` if another thread did a memcmp() at the same time.
+            // It's fine if this has been done.
+            let symbol_name = CString::new("memcmp").unwrap();
+            let fn_address =
+                unsafe { libc::dlsym(libc::RTLD_NEXT, symbol_name.as_ptr()) as *const c_void };
+            let real_memcmp = unsafe { std::mem::transmute::<_, MemCmpFn>(fn_address) };
+            let _ = MEMCMP_ADDRESS.set(real_memcmp);
+            real_memcmp
+        }
+    };
+
+    let result = unsafe { (real_memcmp)(s1, s2, count) };
+    __sanitizer_weak_hook_memcmp(caller_pc, s1, s2, count, result);
+
+    result
+}
+
 // #[no_mangle]
 // extern "C" fn strncmp(
 //     caller_pc: *const std::ffi::c_void,

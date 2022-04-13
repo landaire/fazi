@@ -577,15 +577,27 @@ impl<R: Rng> Fazi<R> {
                 }
                 IntegerWidth::Binary => {
                     if constants.binary.is_empty() {
-                        choice = integer_choices.as_slice().choose(&mut self.rng).expect("choices are empty?").clone();
+                        choice = integer_choices
+                            .as_slice()
+                            .choose(&mut self.rng)
+                            .expect("choices are empty?")
+                            .clone();
                         continue;
                     }
 
-                    let binary_compare_target = constants.binary.iter().choose(&mut self.rng).expect("binary dictionary is empty?");
+                    let binary_compare_target = constants
+                        .binary
+                        .iter()
+                        .choose(&mut self.rng)
+                        .expect("binary dictionary is empty?");
 
                     // Try to find a byte slice that matches one of these arguments
                     let mut found_match = None;
-                    for (idx, window) in self.input.windows(binary_compare_target.0.len()).enumerate() {
+                    for (idx, window) in self
+                        .input
+                        .windows(binary_compare_target.0.len())
+                        .enumerate()
+                    {
                         if window == binary_compare_target.0 {
                             found_match = Some((idx, binary_compare_target.1.clone()));
                             break;
@@ -598,15 +610,19 @@ impl<R: Rng> Fazi<R> {
                     }
                     if let Some((idx, new_data)) = found_match {
                         let input = self.input_mut();
-                        let old_data = &mut input[idx..idx+new_data.len()];
+                        let old_data = &mut input[idx..idx + new_data.len()];
                         old_data.copy_from_slice(new_data.as_slice());
 
                         return Ok(());
                     } else {
-                        choice = integer_choices.as_slice().choose(&mut self.rng).expect("choices are empty?").clone();
+                        choice = integer_choices
+                            .as_slice()
+                            .choose(&mut self.rng)
+                            .expect("choices are empty?")
+                            .clone();
                         continue;
                     }
-                },
+                }
             }
         }
     }

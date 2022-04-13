@@ -13,11 +13,14 @@ pub(crate) fn libfuzzer_runone_fn() -> unsafe extern "C" fn(*const u8, usize) ->
 }
 
 pub(crate) fn libfuzzer_initialize_fn() -> Option<
-    unsafe extern "C" fn(*mut std::os::raw::c_int, *mut *const *const u8) -> std::os::raw::c_int,
+    unsafe extern "C" fn(
+        *mut std::os::raw::c_int,
+        *mut *const *const libc::c_char,
+    ) -> std::os::raw::c_int,
 > {
     #[allow(non_snake_case)]
     {
-        weak!(fn LLVMFuzzerInitialize(*mut std::os::raw::c_int, *mut *const *const u8) -> std::os::raw::c_int);
+        weak!(fn LLVMFuzzerInitialize(*mut std::os::raw::c_int, *mut *const *const libc::c_char) -> std::os::raw::c_int);
 
         LLVMFuzzerInitialize.get()
     }

@@ -1,6 +1,6 @@
 use std::env;
 
-use fazi::{FaziBuilder};
+use fazi::FaziBuilder;
 use rand::prelude::StdRng;
 
 fn main() {

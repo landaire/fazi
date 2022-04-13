@@ -14,6 +14,7 @@ use crate::{
 };
 use std::{
     collections::HashSet,
+    ffi::CString,
     lazy::SyncOnceCell,
     path::{Path, PathBuf},
     sync::{
@@ -27,7 +28,8 @@ use clap::StructOpt;
 use crate::options::Command;
 
 /// Global map of comparison operands from SanCov instrumentation
-pub(crate) static COMPARISON_OPERANDS: SyncOnceCell<Mutex<ComparisonOperandMap>> = SyncOnceCell::new();
+pub(crate) static COMPARISON_OPERANDS: SyncOnceCell<Mutex<ComparisonOperandMap>> =
+    SyncOnceCell::new();
 /// Set of PCs that the fuzzer has reached
 pub(crate) static COVERAGE: SyncOnceCell<Mutex<HashSet<usize>>> = SyncOnceCell::new();
 /// Set of PCs that the fuzzer has reached for this testcase
@@ -66,8 +68,15 @@ extern "C" fn main() {
     let run_input = libfuzzer_runone_fn();
     let user_initialize = libfuzzer_initialize_fn();
     if let Some(user_initialize) = user_initialize {
+        let program_name = CString::new(std::env::args().next().unwrap()).unwrap();
+        let args = [program_name.as_ptr()];
+        let mut argv = &args;
+        let mut argc_len = argv.len() as std::os::raw::c_int;
         unsafe {
-            user_initialize(std::ptr::null_mut(), std::ptr::null_mut());
+            user_initialize(
+                &mut argc_len as *mut _,
+                (&mut argv as *mut _) as *mut *const *const libc::c_char,
+            );
         }
     }
 

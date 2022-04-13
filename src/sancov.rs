@@ -526,24 +526,21 @@ pub(crate) fn memcmp_internal(
     result: std::os::raw::c_int,
     insert_null_terminator: bool,
 ) {
-    TESTCASE_COVERAGE
+    fazi_initialize();
+
+    match TESTCASE_COVERAGE
         .get()
         .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE")
-        .insert(caller_pc);
+        .try_lock()
+    {
+        Ok(mut coverage) => coverage.insert(caller_pc),
+        Err(_) => return,
+    };
 
     if result == 0 || (s1_len <= 1 && s2_len <= 1) {
         // these testcases aren't interesting
         return;
     }
-
-    let constants = COMPARISON_OPERANDS
-        .get()
-        .expect("constants global not initialized");
-    let mut constants = constants
-        .lock()
-        .expect("failed to lock COMPARISON_OPERANDS global");
 
     let mut s1 = unsafe { std::slice::from_raw_parts(s1 as *const u8, s1_len) }.to_vec();
     let mut s2 = unsafe { std::slice::from_raw_parts(s2 as *const u8, s2_len) }.to_vec();
@@ -552,7 +549,13 @@ pub(crate) fn memcmp_internal(
         s2.push(0);
     }
 
-    constants.binary.insert((s1, s2));
+    let constants = COMPARISON_OPERANDS
+        .get()
+        .expect("constants global not initialized");
+    match constants.try_lock() {
+        Ok(mut constants) => constants.binary.insert((s1, s2)),
+        Err(_) => return,
+    };
 }
 
 #[no_mangle]
@@ -576,7 +579,7 @@ extern "C" fn __sanitizer_weak_hook_strncmp(
 ) {
     let s1_len = strnlen(s1, len);
     let s2_len = strnlen(s2, len);
-    memcmp_internal(caller_pc, s1, s1_len, s2,s2_len, result, true);
+    memcmp_internal(caller_pc, s1, s1_len, s2, s2_len, result, true);
 }
 
 #[no_mangle]
@@ -605,7 +608,7 @@ extern "C" fn __sanitizer_weak_hook_strncasecmp(
 ) {
     let s1_len = strnlen(s1, len);
     let s2_len = strnlen(s2, len);
-    memcmp_internal(caller_pc, s1, s1_len, s2,s2_len, result, true);
+    memcmp_internal(caller_pc, s1, s1_len, s2, s2_len, result, true);
 
     //   if (!fuzzer::RunningUserCallback) return;
     //   return __sanitizer_weak_hook_strncmp(called_pc, s1, s2, n, result);
@@ -633,7 +636,7 @@ extern "C" fn __sanitizer_weak_hook_strstr(
 ) {
     let s1_len = strlen(s1);
     let s2_len = strlen(s2);
-    memcmp_internal(caller_pc, s1, s1_len, s2,s2_len, result, true);
+    memcmp_internal(caller_pc, s1, s1_len, s2, s2_len, result, true);
     //   if (!fuzzer::RunningUserCallback) return;
     //   fuzzer::TPC.MMT.Add(reinterpret_cast<const uint8_t *>(s2), strlen(s2));
 }
@@ -647,7 +650,7 @@ extern "C" fn __sanitizer_weak_hook_strcasestr(
 ) {
     let s1_len = strlen(s1);
     let s2_len = strlen(s2);
-    memcmp_internal(caller_pc, s1, s1_len, s2,s2_len, result, true);
+    memcmp_internal(caller_pc, s1, s1_len, s2, s2_len, result, true);
     //   if (!fuzzer::RunningUserCallback) return;
     //   fuzzer::TPC.MMT.Add(reinterpret_cast<const uint8_t *>(s2), strlen(s2));
 }
@@ -685,7 +688,6 @@ fn strnlen(s: *const libc::c_char, max_len: usize) -> usize {
 
     return len.try_into().expect("failed to convert len to usize");
 }
-
 
 /// Returns the minimum string length of the two arguments
 fn strlen2(s1: *const libc::c_char, s2: *const libc::c_char) -> usize {
