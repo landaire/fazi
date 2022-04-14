@@ -40,13 +40,17 @@ pub(crate) fn create_client(
     thread::Builder::new()
         .name("IPC-Client".to_owned())
         .spawn(move || {
-            while let Ok(message) = ipc_channel.try_recv() {
-                conn.write_all(
-                    bincode::serialize(&message)
-                        .expect("failed to serialize IPC message")
-                        .as_slice(),
-                )
-                .expect("failed to write message");
+            loop {
+                while let Ok(message) = ipc_channel.try_recv() {
+                    conn.write_all(
+                        bincode::serialize(&message)
+                            .expect("failed to serialize IPC message")
+                            .as_slice(),
+                    )
+                    .expect("failed to write message");
+                }
+
+                std::thread::sleep(Duration::from_millis(250));
             }
         })
         .expect("failed to spawn client worker thread");
