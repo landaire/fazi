@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     dictionary::{Dictionary, DictionaryEntry},
-    driver::{TESTCASE_COVERAGE, IPC_QUEUE},
+    driver::{IPC_QUEUE, TESTCASE_COVERAGE},
     options::RuntimeOptions,
 };
 
@@ -173,8 +173,13 @@ impl<R: Rng + SeedableRng> Fazi<R> {
         }
 
         // Sort so that smaller testcases are preferred
-        self.restored_corpus.sort_by(|a, b| a.data.len().cmp(&b.data.len()));
-        self.recoverage_queue = self.restored_corpus.iter().map(|input| input.data.clone()).collect();
+        self.restored_corpus
+            .sort_by(|a, b| a.data.len().cmp(&b.data.len()));
+        self.recoverage_queue = self
+            .restored_corpus
+            .iter()
+            .map(|input| input.data.clone())
+            .collect();
     }
 
     /// Iterate over the inputs read from disk and replay them back.
@@ -192,81 +197,91 @@ impl<R: Rng + SeedableRng> Fazi<R> {
 
     /// Iterate over the inputs read from disk and replay them back.
     pub fn fuzz(&mut self, callback: impl Fn(&[u8])) {
-    // Create our IPC primitives
+        // Create our IPC primitives
 
-    use crossbeam_channel::unbounded;
-    use fork::Fork;
+        use crossbeam_channel::unbounded;
+        use fork::Fork;
 
-    use crate::ipc::{
-        create_client, create_rebroadcast_client, create_rebroadcast_server_worker, create_server,
-        server_socket_paths,
-    };
-    let num_processes = if self.options.saturate_cores {
-        num_cpus::get()
-    } else {
-        self.options.cores
-    };
+        use crate::ipc::{
+            create_client, create_rebroadcast_client, create_rebroadcast_server_worker,
+            create_server, server_socket_paths,
+        };
+        let num_processes = if self.options.saturate_cores {
+            num_cpus::get()
+        } else {
+            self.options.cores
+        };
 
-    let mut is_parent = false;
-    let mut children = vec![];
-    let server_id = std::process::id();
-    let mut new_inputs_recv = None;
-    if num_processes > 1 {
-        for _ in 0..(num_processes - 1) {
-            match fork::fork() {
-                Ok(Fork::Parent(child)) => {
-                    children.push(child);
-                    is_parent = true;
-                }
-                Ok(Fork::Child) => {
-                    break;
-                }
-                Err(_) => {
-                    panic!("error occurred while forking!");
+        let mut is_parent = true;
+        let mut children = vec![];
+        let server_id = std::process::id();
+        let mut new_inputs_recv = None;
+        if num_processes > 1 {
+            for child_num in 0..(num_processes - 1) {
+                match fork::fork() {
+                    Ok(Fork::Parent(child)) => {
+                        children.push(child);
+                    }
+                    Ok(Fork::Child) => {
+                        is_parent = false;
+                        for _ in 1..=child_num {
+                            // generate some random numbers to advance this process's
+                            // RNG state so we have some difference between data the
+                            // processes generate
+                            let _foo: usize = self.rng.gen();
+                        }
+                        break;
+                    }
+                    Err(_) => {
+                        panic!("error occurred while forking!");
+                    }
                 }
             }
-        }
 
-        // Create our message queue
-        let (send, recv) = unbounded();
-        let (new_inputs_send, new_inputs_recv_queue) = unbounded();
-        new_inputs_recv = Some(new_inputs_recv_queue);
-
-        IPC_QUEUE.set(send).expect("IPC_QUEUE alerady initialized");
-        let mut senders = Vec::with_capacity(num_processes);
-        let mut receivers = Vec::with_capacity(num_processes);
-        for _ in 0..num_processes {
+            // Create our message queue
             let (send, recv) = unbounded();
-            senders.push(Arc::new(send));
-            receivers.push(Arc::new(recv));
-        }
+            let (new_inputs_send, new_inputs_recv_queue) = unbounded();
+            new_inputs_recv = Some(new_inputs_recv_queue);
 
-        let (client_to_server_socket_path, rebroadcast_path) = server_socket_paths(server_id);
-        if client_to_server_socket_path.exists() {
-            std::fs::remove_file(&client_to_server_socket_path)
-                .expect("could not remove existing socket");
-        }
-        if rebroadcast_path.exists() {
-            std::fs::remove_file(&rebroadcast_path)
-                .expect("could not remove existing rebroadcast socket");
-        }
+            IPC_QUEUE.set(send).expect("IPC_QUEUE alerady initialized");
+            let mut senders = Vec::with_capacity(num_processes);
+            let mut receivers = Vec::with_capacity(num_processes);
+            for _ in 0..num_processes {
+                let (send, recv) = unbounded();
+                senders.push(Arc::new(send));
+                receivers.push(Arc::new(recv));
+            }
 
-        if is_parent {
-            create_server(
-                client_to_server_socket_path.as_ref(),
-                Arc::new(senders),
-                new_inputs_send,
-            )
-            .expect("failed to create server");
-            create_rebroadcast_server_worker(rebroadcast_path.as_ref(), Arc::new(receivers), recv)
+            let (client_to_server_socket_path, rebroadcast_path) = server_socket_paths(server_id);
+            if client_to_server_socket_path.exists() {
+                std::fs::remove_file(&client_to_server_socket_path)
+                    .expect("could not remove existing socket");
+            }
+            if rebroadcast_path.exists() {
+                std::fs::remove_file(&rebroadcast_path)
+                    .expect("could not remove existing rebroadcast socket");
+            }
+
+            if is_parent {
+                create_server(
+                    client_to_server_socket_path.as_ref(),
+                    Arc::new(senders),
+                    new_inputs_send,
+                )
                 .expect("failed to create server");
-        } else {
-            create_client(client_to_server_socket_path.as_ref(), recv)
-                .expect("failed to create client");
-            create_rebroadcast_client(rebroadcast_path.as_ref(), new_inputs_send)
-                .expect("failed to create rebroadcast client");
+                create_rebroadcast_server_worker(
+                    rebroadcast_path.as_ref(),
+                    Arc::new(receivers),
+                    recv,
+                )
+                .expect("failed to create server");
+            } else {
+                create_client(client_to_server_socket_path.as_ref(), recv)
+                    .expect("failed to create client");
+                create_rebroadcast_client(rebroadcast_path.as_ref(), new_inputs_send)
+                    .expect("failed to create rebroadcast client");
+            }
         }
-    }
         // Ensure we update our coverage numbers to avoid misattributing any noise
         // that may have occurred before we started fuzzing
         update_coverage();
@@ -280,8 +295,9 @@ impl<R: Rng + SeedableRng> Fazi<R> {
 
             if let Some(new_inputs_recv) = new_inputs_recv.as_ref() {
                 if let Ok((new_input_name, coverage)) = new_inputs_recv.try_recv() {
-                    let input_file_data = std::fs::read(&new_input_name)
-                        .unwrap_or_else(|e| panic!("failed to read new input at {:?}: {}", new_input_name, e));
+                    let input_file_data = std::fs::read(&new_input_name).unwrap_or_else(|e| {
+                        panic!("failed to read new input at {:?}: {}", new_input_name, e)
+                    });
                     self.corpus.push(Input {
                         coverage,
                         data: Arc::new(input_file_data),
@@ -335,7 +351,11 @@ impl<R: Rng + SeedableRng> Fazi<R> {
         }
 
         if self.recoverage_queue.is_empty() {
-            self.corpus.extend(self.restored_corpus.drain(..).filter(|item| item.coverage > 0));
+            self.corpus.extend(
+                self.restored_corpus
+                    .drain(..)
+                    .filter(|item| item.coverage > 0),
+            );
         }
     }
 }
