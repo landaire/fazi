@@ -116,6 +116,7 @@ pub(crate) fn create_server(
 pub(crate) fn create_rebroadcast_server_worker(
     socket_path: &Path,
     rebroadcasting_receivers: Arc<Vec<Arc<Receiver<IpcMessage>>>>,
+    server_receiver: Receiver<IpcMessage>,
 ) -> Result<(), Box<dyn Error>> {
     let listener = LocalSocketListener::bind(socket_path)?;
     let mut num_clients = 0;
@@ -124,6 +125,7 @@ pub(crate) fn create_rebroadcast_server_worker(
     thread::spawn(move || {
         for mut conn in listener.incoming().filter_map(handle_error) {
             let rebroadcasting = (&*rebroadcasting_receivers)[num_clients].clone();
+            let server_receiver = server_receiver.clone();
 
             num_clients += 1;
             join_handles.push(
@@ -131,9 +133,7 @@ pub(crate) fn create_rebroadcast_server_worker(
                     .name(format!("IPC-Client-Rebroadcasting-Handler-{}", num_clients))
                     .spawn(move || {
                         loop {
-                            // Check if we have any new inputs waiting for us to push down
-                            // to this client
-                            while let Ok(input) = rebroadcasting.recv() {
+                            while let Ok(input) = server_receiver.try_recv() {
                                 conn.write_all(
                                     bincode::serialize(&input)
                                         .expect("failed to serialize new input")
@@ -141,6 +141,19 @@ pub(crate) fn create_rebroadcast_server_worker(
                                 )
                                 .expect("could not send new input to client");
                             }
+
+                            // Check if we have any new inputs waiting for us to push down
+                            // to this client
+                            while let Ok(input) = rebroadcasting.try_recv() {
+                                conn.write_all(
+                                    bincode::serialize(&input)
+                                        .expect("failed to serialize new input")
+                                        .as_ref(),
+                                )
+                                .expect("could not send new input to client");
+                            }
+
+                            std::thread::sleep(Duration::from_millis(250));
                         }
                     })
                     .expect("failed to spawn IPC thread"),

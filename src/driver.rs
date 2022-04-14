@@ -175,7 +175,7 @@ extern "C" fn main() {
                 new_inputs_send,
             )
             .expect("failed to create server");
-            create_rebroadcast_server_worker(rebroadcast_path.as_ref(), Arc::new(receivers))
+            create_rebroadcast_server_worker(rebroadcast_path.as_ref(), Arc::new(receivers), recv)
                 .expect("failed to create server");
         } else {
             create_client(client_to_server_socket_path.as_ref(), recv)
