@@ -4,7 +4,7 @@ use std::{
     io::{self, Read, Write},
     lazy::SyncOnceCell,
     ops::Deref,
-    path::{PathBuf, Path},
+    path::{Path, PathBuf},
     sync::{atomic::AtomicUsize, Arc, Mutex, RwLock},
     thread,
     time::Duration,
@@ -13,7 +13,7 @@ use std::{
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use interprocess::local_socket::{LocalSocketListener, LocalSocketStream};
 
-use crate::{driver::coverage_map};
+use crate::driver::coverage_map;
 use serde::{Deserialize, Serialize};
 
 fn handle_error(connection: io::Result<LocalSocketStream>) -> Option<LocalSocketStream> {
@@ -39,19 +39,17 @@ pub(crate) fn create_client(
 
     thread::Builder::new()
         .name("IPC-Client".to_owned())
-        .spawn(move || {
-            loop {
-                while let Ok(message) = ipc_channel.try_recv() {
-                    conn.write_all(
-                        bincode::serialize(&message)
-                            .expect("failed to serialize IPC message")
-                            .as_slice(),
-                    )
-                    .expect("failed to write message");
-                }
-
-                std::thread::sleep(Duration::from_millis(250));
+        .spawn(move || loop {
+            while let Ok(message) = ipc_channel.try_recv() {
+                conn.write_all(
+                    bincode::serialize(&message)
+                        .expect("failed to serialize IPC message")
+                        .as_slice(),
+                )
+                .expect("failed to write message");
             }
+
+            std::thread::sleep(Duration::from_millis(250));
         })
         .expect("failed to spawn client worker thread");
 
@@ -59,7 +57,10 @@ pub(crate) fn create_client(
 }
 
 pub(crate) fn server_socket_paths(server_id: u32) -> (PathBuf, PathBuf) {
-    (PathBuf::from(format!("/tmp/fazi-{}.sock", server_id)), PathBuf::from(format!("/tmp/fazi-{}-rebroadcast.sock", server_id)))
+    (
+        PathBuf::from(format!("/tmp/fazi-{}.sock", server_id)),
+        PathBuf::from(format!("/tmp/fazi-{}-rebroadcast.sock", server_id)),
+    )
 }
 
 pub(crate) fn create_server(
@@ -83,7 +84,7 @@ pub(crate) fn create_server(
                     .name(format!("IPC-Client-Handler-{}", num_clients))
                     .spawn(move || {
                         loop {
-                            if let Ok(message) =
+                            while let Ok(message) =
                                 bincode::deserialize_from::<_, IpcMessage>(&mut conn)
                             {
                                 // Rebroadcast this message
@@ -103,7 +104,9 @@ pub(crate) fn create_server(
                                             .lock()
                                             .expect("failed to lock coverage map");
                                         coverage.extend(new_coverage.into_iter());
-                                        new_input_names.send((input_name, input_coverage));
+                                        new_input_names.send((input_name, input_coverage)).expect(
+                                            "failed to send new input name to driver thread",
+                                        );
                                     }
                                 }
                             }
@@ -181,13 +184,17 @@ pub(crate) fn create_rebroadcast_client(
     thread::Builder::new()
         .name("IPC-Client".to_owned())
         .spawn(move || {
-            if let Ok(message) = bincode::deserialize_from::<_, IpcMessage>(&mut conn) {
-                match message {
-                    IpcMessage::NewCoverage(input_name, new_input_coverage, new_coverage) => {
-                        let mut coverage =
-                            coverage_map().lock().expect("failed to lock coverage map");
-                        coverage.extend(new_coverage.into_iter());
-                        new_input_names.send((input_name, new_input_coverage));
+            loop {
+                while let Ok(message) = bincode::deserialize_from::<_, IpcMessage>(&mut conn) {
+                    match message {
+                        IpcMessage::NewCoverage(input_name, new_input_coverage, new_coverage) => {
+                            let mut coverage =
+                                coverage_map().lock().expect("failed to lock coverage map");
+                            coverage.extend(new_coverage.into_iter());
+                            new_input_names
+                                .send((input_name, new_input_coverage))
+                                .expect("failed to send new input names to driver thread");
+                        }
                     }
                 }
             }
