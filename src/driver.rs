@@ -358,7 +358,7 @@ pub(crate) fn save_input(corpus_dir: &Path, extension: Option<&str>, input: &[u8
 
     std::fs::write(&corpus_file_path, input).expect("failed to save corpus input file!");
 
-    corpus_file_path
+    corpus_file_path.to_str().unwrap().to_owned()
 }
 
 /// Ensures that the parent directory of `path` exists. If it does not, we will
