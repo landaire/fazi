@@ -109,82 +109,6 @@ extern "C" fn main() {
         }
     }
 
-    // Create our IPC primitives
-
-    use crossbeam_channel::unbounded;
-    use fork::Fork;
-
-    use crate::ipc::{
-        create_client, create_rebroadcast_client, create_rebroadcast_server_worker, create_server,
-        server_socket_paths,
-    };
-    let num_processes = if fazi.options.saturate_cores {
-        num_cpus::get()
-    } else {
-        fazi.options.cores
-    };
-
-    let mut is_parent = false;
-    let mut children = vec![];
-    let server_id = std::process::id();
-    let mut new_inputs_recv = None;
-    if num_processes > 1 {
-        for _ in 0..(num_processes - 1) {
-            match fork::fork() {
-                Ok(Fork::Parent(child)) => {
-                    children.push(child);
-                    is_parent = true;
-                }
-                Ok(Fork::Child) => {
-                    break;
-                }
-                Err(_) => {
-                    panic!("error occurred while forking!");
-                }
-            }
-        }
-
-        // Create our message queue
-        let (send, recv) = unbounded();
-        let (new_inputs_send, new_inputs_recv_queue) = unbounded();
-        new_inputs_recv = Some(new_inputs_recv_queue);
-
-        IPC_QUEUE.set(send).expect("IPC_QUEUE alerady initialized");
-        let mut senders = Vec::with_capacity(num_processes);
-        let mut receivers = Vec::with_capacity(num_processes);
-        for _ in 0..num_processes {
-            let (send, recv) = unbounded();
-            senders.push(Arc::new(send));
-            receivers.push(Arc::new(recv));
-        }
-
-        let (client_to_server_socket_path, rebroadcast_path) = server_socket_paths(server_id);
-        if client_to_server_socket_path.exists() {
-            std::fs::remove_file(&client_to_server_socket_path)
-                .expect("could not remove existing socket");
-        }
-        if rebroadcast_path.exists() {
-            std::fs::remove_file(&rebroadcast_path)
-                .expect("could not remove existing rebroadcast socket");
-        }
-
-        if is_parent {
-            create_server(
-                client_to_server_socket_path.as_ref(),
-                Arc::new(senders),
-                new_inputs_send,
-            )
-            .expect("failed to create server");
-            create_rebroadcast_server_worker(rebroadcast_path.as_ref(), Arc::new(receivers), recv)
-                .expect("failed to create server");
-        } else {
-            create_client(client_to_server_socket_path.as_ref(), recv)
-                .expect("failed to create client");
-            create_rebroadcast_client(rebroadcast_path.as_ref(), new_inputs_send)
-                .expect("failed to create rebroadcast client");
-        }
-    }
-
     eprintln!("Performing fuzzing");
 
     fazi.fuzz(|input| {
@@ -419,7 +343,7 @@ pub(crate) fn handle_crash(crashes_dir: &Path, extension: Option<&str>, input: &
     std::fs::write(crash_file_path, input).expect("failed to save crash file!");
 }
 
-pub(crate) fn save_input(corpus_dir: &Path, extension: Option<&str>, input: &[u8]) -> String {
+pub(crate) fn save_input(corpus_dir: &Path, extension: Option<&str>, input: &[u8]) -> PathBuf {
     let mut hasher = Sha1::new();
     hasher.update(input);
     let result = hasher.finalize();
@@ -432,9 +356,9 @@ pub(crate) fn save_input(corpus_dir: &Path, extension: Option<&str>, input: &[u8
     eprintln!("Saving corpus input to {:?}", corpus_file_path);
     ensure_parent_dir_exists(corpus_file_path.as_ref());
 
-    std::fs::write(corpus_file_path, input).expect("failed to save corpus input file!");
+    std::fs::write(&corpus_file_path, input).expect("failed to save corpus input file!");
 
-    filename
+    corpus_file_path
 }
 
 /// Ensures that the parent directory of `path` exists. If it does not, we will

@@ -24,7 +24,7 @@ fn handle_error(connection: io::Result<LocalSocketStream>) -> Option<LocalSocket
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub(crate) enum IpcMessage {
-    NewCoverage(String, usize, Vec<usize>),
+    NewCoverage(PathBuf, usize, Vec<usize>),
 }
 
 pub(crate) fn create_client(
@@ -61,7 +61,7 @@ pub(crate) fn server_socket_paths(server_id: u32) -> (PathBuf, PathBuf) {
 pub(crate) fn create_server(
     socket_path: &Path,
     rebroadcasting_senders: Arc<Vec<Arc<Sender<IpcMessage>>>>,
-    new_input_names: crossbeam_channel::Sender<(String, usize)>,
+    new_input_names: crossbeam_channel::Sender<(PathBuf, usize)>,
 ) -> Result<(), Box<dyn Error>> {
     let listener = LocalSocketListener::bind(socket_path)?;
     let mut num_clients = 0;
@@ -166,7 +166,7 @@ pub(crate) fn create_rebroadcast_server_worker(
 
 pub(crate) fn create_rebroadcast_client(
     socket_path: &Path,
-    new_input_names: crossbeam_channel::Sender<(String, usize)>,
+    new_input_names: crossbeam_channel::Sender<(PathBuf, usize)>,
 ) -> Result<(), Box<dyn Error>> {
     while !socket_path.exists() {
         std::thread::sleep(Duration::from_millis(250));
