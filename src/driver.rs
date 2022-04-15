@@ -176,6 +176,8 @@ impl<R: Rng> Fazi<R> {
 
         let can_request_more_data = !self.min_input_size.is_some();
 
+        let last_dictionary_entry = self.last_dictionary_input.take();
+
         if old_coverage != new_coverage {
             eprintln!(
                 "old coverage: {}, new coverage: {}, mutations: {:?}",
@@ -183,7 +185,7 @@ impl<R: Rng> Fazi<R> {
             );
 
             // Check if this new coverage was the result of a dictionary entry
-            if let Some(entry) = self.last_dictionary_input.take() {
+            if let Some(entry) = last_dictionary_entry {
                 match entry {
                     DictionaryEntry::U8(offset, val) => {
                         self.dictionary.u8dict.insert(offset, val);
