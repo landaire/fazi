@@ -199,7 +199,7 @@ impl<R: Rng + SeedableRng> Fazi<R> {
     pub fn fuzz(&mut self, callback: impl Fn(&[u8])) {
         // Create our IPC primitives
 
-        use crossbeam_channel::unbounded;
+        use crossbeam_channel::{unbounded, TryRecvError};
         use fork::Fork;
 
         use crate::ipc::{
@@ -294,14 +294,29 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             self.end_iteration(false);
 
             if let Some(new_inputs_recv) = new_inputs_recv.as_ref() {
-                if let Ok((new_input_name, coverage)) = new_inputs_recv.try_recv() {
-                    let input_file_data = std::fs::read(&new_input_name).unwrap_or_else(|e| {
-                        panic!("failed to read new input at {:?}: {}", new_input_name, e)
-                    });
-                    self.corpus.push(Input {
-                        coverage,
-                        data: Arc::new(input_file_data),
-                    })
+                loop {
+                    match new_inputs_recv.try_recv() {
+                        Ok((new_input_name, coverage)) => {
+                            let input_file_data =
+                                std::fs::read(&new_input_name).unwrap_or_else(|e| {
+                                    panic!(
+                                        "failed to read new input at {:?}: {}",
+                                        new_input_name, e
+                                    )
+                                });
+                            self.corpus.push(Input {
+                                coverage,
+                                data: Arc::new(input_file_data),
+                            })
+                        }
+                        Err(TryRecvError::Empty) => {
+                            // this is fine
+                            break;
+                        }
+                        Err(TryRecvError::Disconnected) => {
+                            panic!("new_inputs_recv opposite end disconnected?");
+                        }
+                    }
                 }
             }
 

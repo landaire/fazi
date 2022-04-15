@@ -10,7 +10,7 @@ use std::{
     time::Duration,
 };
 
-use crossbeam_channel::{unbounded, Receiver, Sender};
+use crossbeam_channel::{unbounded, Receiver, Sender, TryReadyError, TryRecvError};
 use interprocess::local_socket::{LocalSocketListener, LocalSocketStream};
 
 use crate::driver::coverage_map;
@@ -27,6 +27,13 @@ pub(crate) enum IpcMessage {
     NewCoverage(PathBuf, usize, Vec<usize>),
 }
 
+pub(crate) fn server_socket_paths(server_id: u32) -> (PathBuf, PathBuf) {
+    (
+        PathBuf::from(format!("/tmp/fazi-{}.sock", server_id)),
+        PathBuf::from(format!("/tmp/fazi-{}-rebroadcast.sock", server_id)),
+    )
+}
+
 pub(crate) fn create_client(
     socket_path: &Path,
     ipc_channel: crossbeam_channel::Receiver<IpcMessage>,
@@ -40,27 +47,30 @@ pub(crate) fn create_client(
     thread::Builder::new()
         .name("IPC-Client".to_owned())
         .spawn(move || loop {
-            while let Ok(message) = ipc_channel.try_recv() {
-                conn.write_all(
-                    bincode::serialize(&message)
-                        .expect("failed to serialize IPC message")
-                        .as_slice(),
-                )
-                .expect("failed to write message");
+            loop {
+                match ipc_channel.try_recv() {
+                    Ok(message) => {
+                        conn.write_all(
+                            bincode::serialize(&message)
+                                .expect("failed to serialize IPC message")
+                                .as_slice(),
+                        )
+                        .expect("failed to write message");
+                    }
+                    Err(TryRecvError::Empty) => {
+                        break;
+                    }
+                    Err(TryRecvError::Disconnected) => {
+                        panic!("other end of client IPC channel disconnected");
+                    }
+                }
             }
 
-            std::thread::sleep(Duration::from_millis(250));
+            std::thread::sleep(Duration::from_secs(1));
         })
         .expect("failed to spawn client worker thread");
 
     Ok(())
-}
-
-pub(crate) fn server_socket_paths(server_id: u32) -> (PathBuf, PathBuf) {
-    (
-        PathBuf::from(format!("/tmp/fazi-{}.sock", server_id)),
-        PathBuf::from(format!("/tmp/fazi-{}-rebroadcast.sock", server_id)),
-    )
 }
 
 pub(crate) fn create_server(
@@ -140,24 +150,44 @@ pub(crate) fn create_rebroadcast_server_worker(
                     .name(format!("IPC-Client-Rebroadcasting-Handler-{}", num_clients))
                     .spawn(move || {
                         loop {
-                            while let Ok(input) = server_receiver.try_recv() {
-                                conn.write_all(
-                                    bincode::serialize(&input)
-                                        .expect("failed to serialize new input")
-                                        .as_ref(),
-                                )
-                                .expect("could not send new input to client");
+                            loop {
+                                match server_receiver.try_recv() {
+                                    Ok(input) => {
+                                        conn.write_all(
+                                            bincode::serialize(&input)
+                                                .expect("failed to serialize new input")
+                                                .as_ref(),
+                                        )
+                                        .expect("could not send new input to client");
+                                    }
+                                    Err(TryRecvError::Empty) => {
+                                        break;
+                                    }
+                                    Err(e) => {
+                                        panic!("unexpected error occurred while reading from server_receiver: {}", e);
+                                    }
+                                }
                             }
 
                             // Check if we have any new inputs waiting for us to push down
                             // to this client
-                            while let Ok(input) = rebroadcasting.try_recv() {
-                                conn.write_all(
-                                    bincode::serialize(&input)
-                                        .expect("failed to serialize new input")
-                                        .as_ref(),
-                                )
-                                .expect("could not send new input to client");
+                            loop {
+                                match  rebroadcasting.try_recv() {
+                                    Ok(input) => {
+                                        conn.write_all(
+                                            bincode::serialize(&input)
+                                                .expect("failed to serialize new input")
+                                                .as_ref(),
+                                        )
+                                        .expect("could not send new input to client");
+                                    }
+                                    Err(TryRecvError::Empty) => {
+                                        break;
+                                    }
+                                    Err(e) => {
+                                            panic!("unexpected error occurred while reading from rebroadcasting queue: {}", e);
+                                    }
+                                }
                             }
 
                             std::thread::sleep(Duration::from_millis(250));
@@ -183,18 +213,16 @@ pub(crate) fn create_rebroadcast_client(
 
     thread::Builder::new()
         .name("IPC-Client".to_owned())
-        .spawn(move || {
-            loop {
-                while let Ok(message) = bincode::deserialize_from::<_, IpcMessage>(&mut conn) {
-                    match message {
-                        IpcMessage::NewCoverage(input_name, new_input_coverage, new_coverage) => {
-                            let mut coverage =
-                                coverage_map().lock().expect("failed to lock coverage map");
-                            coverage.extend(new_coverage.into_iter());
-                            new_input_names
-                                .send((input_name, new_input_coverage))
-                                .expect("failed to send new input names to driver thread");
-                        }
+        .spawn(move || loop {
+            while let Ok(message) = bincode::deserialize_from::<_, IpcMessage>(&mut conn) {
+                match message {
+                    IpcMessage::NewCoverage(input_name, new_input_coverage, new_coverage) => {
+                        let mut coverage =
+                            coverage_map().lock().expect("failed to lock coverage map");
+                        coverage.extend(new_coverage.into_iter());
+                        new_input_names
+                            .send((input_name, new_input_coverage))
+                            .expect("failed to send new input names to driver thread");
                     }
                 }
             }

@@ -13,6 +13,8 @@ pub mod exports;
 mod fazi;
 /// Function hooks for builtin functions
 mod hooks;
+/// Data that is shared between worker processes
+mod ipc;
 /// Main mutation logic
 mod mutations;
 /// Runtime configuration options
@@ -25,7 +27,5 @@ mod signal;
 mod weak;
 /// Weakly linked imports
 mod weak_imports;
-/// Data that is shared between worker processes
-mod ipc;
 
 pub use crate::fazi::*;
