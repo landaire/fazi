@@ -3,9 +3,11 @@ use std::{
     sync::{atomic::Ordering, Mutex},
 };
 
+use clap::StructOpt;
+
 use crate::{
-    driver::{update_coverage, FAZI, FAZI_INITIALIZED},
-    Fazi,
+    driver::{update_coverage, FAZI, FAZI_INITIALIZED, COMPARISON_OPERANDS},
+    Fazi, options::RuntimeOptions,
 };
 
 #[no_mangle]
@@ -118,4 +120,51 @@ pub extern "C" fn fazi_set_crashes_dir(dir: *const libc::c_char) {
     let dir = unsafe { CStr::from_ptr(dir) };
 
     fazi.options.crashes_dir = dir.to_string_lossy().into_owned().into();
+}
+
+#[no_mangle]
+/// Adds binary data to the Fazi dictionary
+pub extern "C" fn fazi_dictionary_add(a: *const libc::c_char, alen: usize, b: *const libc::c_char, blen: usize) {
+    let constants = COMPARISON_OPERANDS
+        .get()
+        .expect("constants global not initialized");
+
+    if let Ok(mut constants) = constants.try_lock() {
+        match (a == std::ptr::null(), b == std::ptr::null()) {
+            (true, false) => {
+                let dictionary_data = unsafe { std::slice::from_raw_parts(b as *const u8, blen) };
+                constants.binary.insert((Vec::with_capacity(0), dictionary_data.to_vec()));
+            }
+            (false, true) => {
+                let dictionary_data = unsafe { std::slice::from_raw_parts(a as *const u8, alen) };
+                constants.binary.insert((Vec::with_capacity(0), dictionary_data.to_vec()));
+            }
+            (false, false) => {
+                let a_dict = unsafe { std::slice::from_raw_parts(a as *const u8, alen) };
+                let b_dict = unsafe { std::slice::from_raw_parts(b as *const u8, blen) };
+                constants.binary.insert((a_dict.to_vec(), b_dict.to_vec()));
+            }
+            (true, true) => {
+                // Do nothing, we got passed bad input
+            }
+        }
+    }
+}
+
+#[no_mangle]
+/// Enables RUST_BACKTRACE=full for debugging issues with Fazi
+pub extern "C" fn fazi_enable_rust_backtrace() {
+    std::env::set_var("RUST_BACKTRACE", "full");
+}
+
+#[no_mangle]
+/// Parses args from the command line
+pub extern "C" fn fazi_read_cli_args() {
+    let mut fazi = FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
+
+    fazi.set_options(RuntimeOptions::parse());
 }
