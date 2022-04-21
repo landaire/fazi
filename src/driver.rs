@@ -209,9 +209,9 @@ impl<R: Rng> Fazi<R> {
             self.current_mutation_depth = 0;
             self.mutations.clear();
         } else if self.current_mutation_depth == self.options.max_mutation_depth
-            && (!need_more_data || !can_request_more_data)
+            && !(need_more_data && can_request_more_data)
         {
-            let next_input = if self.rng.gen_bool(0.75) {
+            let next_input = if self.rng.gen() {
                 self.corpus.peek()
             } else {
                 self.corpus
