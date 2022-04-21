@@ -168,3 +168,15 @@ pub extern "C" fn fazi_read_cli_args() {
 
     fazi.set_options(RuntimeOptions::parse());
 }
+
+#[no_mangle]
+/// Parses args from the command line
+pub extern "C" fn fazi_restore_inputs() {
+    let mut fazi = FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
+
+    fazi.restore_inputs();
+}
