@@ -433,7 +433,6 @@ impl<R: Rng> Fazi<R> {
             IntegerWidth::U16,
             IntegerWidth::U32,
             IntegerWidth::U64,
-            IntegerWidth::Binary,
         ];
         let integer_choices = [
             IntegerWidth::U8,
@@ -441,11 +440,15 @@ impl<R: Rng> Fazi<R> {
             IntegerWidth::U32,
             IntegerWidth::U64,
         ];
-        let mut choice = choices
+        let mut choice = if self.rng.gen() {
+            IntegerWidth::Binary
+        } else {
+            choices
             .as_slice()
             .choose(&mut self.rng)
             .expect("empty choices?")
-            .clone();
+            .clone()
+        };
 
         let mut constants = COMPARISON_OPERANDS
             .get()
@@ -590,28 +593,94 @@ impl<R: Rng> Fazi<R> {
                         .iter()
                         .choose(&mut self.rng)
                         .expect("binary dictionary is empty?");
+                    let (left_side_len, right_side_len) = (binary_compare_target.0.len(), binary_compare_target.1.len());
+
+                    // If one of the lengths was 0 bytes, we need to just overwrite/insert these bytes randomly
+                    let random_position_bytes = if left_side_len == 0 {
+                        Some(binary_compare_target.1.as_slice())
+                    } else if right_side_len == 0 {
+                        Some(binary_compare_target.0.as_slice())
+                    } else {
+                        None
+                    };
+
+                    if let Some(random_position_bytes) = random_position_bytes {
+                        // If we can't overwrite the data, we always insert
+                        let should_insert = self.input.len() < random_position_bytes.len() || self.rng.gen();
+                        let upper_bound = if should_insert {
+                            self.input.len()
+                        } else {
+                            self.input.len() - random_position_bytes.len()
+                        };
+
+                        let idx = self.rng.gen_range(0..upper_bound);
+                        let input = self.input_mut();
+                        if should_insert {
+                            for &b in random_position_bytes.iter().rev() {
+                                input.insert(idx, b);
+                            }
+                        } else {
+                            let old_data = &mut input[idx..idx + random_position_bytes.len()];
+                            old_data.copy_from_slice(random_position_bytes);
+                        }
+
+                        return Ok(());
+                    }
+
+                    let (bytes_in_input, bytes_it_should_be) = if self.rng.gen_bool(0.90) {
+                        (binary_compare_target.0.as_slice(), binary_compare_target.1.as_slice())
+                    } else {
+                        (binary_compare_target.1.as_slice(), binary_compare_target.0.as_slice())
+                    };
 
                     // Try to find a byte slice that matches one of these arguments
                     let mut found_match = None;
                     for (idx, window) in self
                         .input
-                        .windows(binary_compare_target.0.len())
+                        .windows(bytes_in_input.len())
                         .enumerate()
                     {
-                        if window == binary_compare_target.0 {
-                            found_match = Some((idx, binary_compare_target.1.clone()));
+                        if window == bytes_in_input {
+                            found_match = Some((idx, bytes_in_input, bytes_it_should_be));
                             break;
                         }
 
-                        if window == binary_compare_target.1 {
-                            found_match = Some((idx, binary_compare_target.0.clone()));
+                        if bytes_in_input.len() == bytes_it_should_be.len() && window == bytes_it_should_be {
+                            found_match = Some((idx, bytes_it_should_be, bytes_in_input));
                             break;
                         }
                     }
-                    if let Some((idx, new_data)) = found_match {
+
+                    if let Some((idx, bytes_in_input, new_bytes)) = found_match {
+                        let insert_at_start = self.rng.gen();
                         let input = self.input_mut();
-                        let old_data = &mut input[idx..idx + new_data.len()];
-                        old_data.copy_from_slice(new_data.as_slice());
+
+                        if insert_at_start {
+                            for &b in new_bytes {
+                                input.insert(idx, b);
+                            }
+
+                            return Ok(());
+                        }
+
+                        let old_data = &mut input[idx..idx + bytes_in_input.len()];
+                        if old_data.len() < new_bytes.len() {
+                            // Overwrite as much data as we can
+                            let (overwritten_data, data_to_insert) = new_bytes.split_at(bytes_in_input.len());
+                            old_data.copy_from_slice(overwritten_data);
+                            for &b in data_to_insert.iter().rev() {
+                                input.insert(idx + overwritten_data.len(), b);
+                            }
+                        } else if old_data.len() > new_bytes.len() {
+                            // Copy the new data
+                            old_data[..new_bytes.len()].copy_from_slice(new_bytes);
+                            // Remove the difference (old data had extra bytes)
+                            let start_idx = idx + new_bytes.len();
+                            let extra_byte_count = old_data.len() - new_bytes.len();
+                            input.drain(start_idx..(start_idx + extra_byte_count));
+                        } else if old_data.len() == new_bytes.len() {
+                            old_data.copy_from_slice(new_bytes);
+                        }
 
                         return Ok(());
                     } else {
