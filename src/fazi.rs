@@ -58,6 +58,9 @@ pub struct Fazi<R: Rng> {
     pub(crate) last_dictionary_input: Option<DictionaryEntry>,
     /// All inputs in our fuzzer corpus
     pub(crate) corpus: BinaryHeap<Input>,
+    /// All inputs that we've read from disk. These items will move into `corpus`
+    /// upon the first fuzzer iteration.
+    pub(crate) restored_corpus: Vec<Input>,
     /// Our runtime configuration
     pub(crate) options: RuntimeOptions,
     /// Number of fuzz iterations performed
@@ -77,6 +80,8 @@ pub struct Fazi<R: Rng> {
     pub(crate) current_max_mutation_len: usize,
     /// Counter for when we last updated the max input length
     pub(crate) last_corpus_update_run: usize,
+    /// The last item that was run through recoverage
+    pub(crate) last_recoverage_input: Option<Arc<Vec<u8>>>,
 }
 
 impl Default for Fazi<StdRng> {
@@ -87,6 +92,7 @@ impl Default for Fazi<StdRng> {
             dictionary: Default::default(),
             last_dictionary_input: None,
             corpus: Default::default(),
+            restored_corpus: Vec::new(),
             options: Default::default(),
             iterations: 0,
             min_input_size: None,
@@ -96,6 +102,7 @@ impl Default for Fazi<StdRng> {
             max_input_size: 4,
             last_corpus_update_run: 0,
             current_max_mutation_len: 0,
+            last_recoverage_input: None,
         }
     }
 }
@@ -130,6 +137,7 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             dictionary: Default::default(),
             last_dictionary_input: None,
             corpus: Default::default(),
+            restored_corpus: Vec::new(),
             options: Default::default(),
             iterations: 0,
             min_input_size: None,
@@ -139,6 +147,7 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             max_input_size: 4,
             last_corpus_update_run: 0,
             current_max_mutation_len: 0,
+            last_recoverage_input: None,
         }
     }
 
@@ -157,7 +166,7 @@ impl<R: Rng + SeedableRng> Fazi<R> {
                         continue;
                     }
 
-                    self.corpus.push(Input {
+                    self.restored_corpus.push(Input {
                         coverage: 0,
                         data: Arc::new(
                             fs::read(input_file_path).expect("failed to read input file"),
@@ -167,20 +176,25 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             }
         }
 
-        self.recoverage_queue = self.corpus.iter().map(|input| input.data.clone()).collect();
+        // Sort so that smaller testcases are preferred
+        self.restored_corpus.sort_by(|a, b| a.data.len().cmp(&b.data.len()));
+        self.recoverage_queue = self.restored_corpus.iter().map(|input| input.data.clone()).collect();
     }
 
     /// Iterate over the inputs read from disk and replay them back.
     pub fn perform_recoverage(&mut self, callback: impl Fn(&[u8])) {
-        for input in self.recoverage_queue.drain(..) {
+        let recoverage_queue = self.recoverage_queue.clone();
+        self.recoverage_queue.clear();
+
+        for input in recoverage_queue{
             poison_input(&input);
 
             (callback)(input.as_slice());
 
             unpoison_input(&input);
-        }
 
-        update_coverage();
+            self.recoverage_testcase_end();
+        }
     }
 
     /// Iterate over the inputs read from disk and replay them back.
@@ -227,6 +241,23 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             .expect("PC_INFO already initialized");
 
         FAZI_INITIALIZED.store(true, Ordering::Relaxed);
+    }
+
+    /// Updates the coverage for the item we just ran through recoverage
+    pub fn recoverage_testcase_end(&mut self) {
+        if let Some(recoverage_input) = self.last_recoverage_input.take() {
+            for input in &mut self.restored_corpus {
+                if input.data.as_ptr() == recoverage_input.as_ptr() {
+                    let (_, _, input_coverage) = update_coverage();
+                    input.coverage = input_coverage;
+                    break;
+                }
+            }
+        }
+
+        if self.recoverage_queue.is_empty() {
+            self.corpus.extend(self.restored_corpus.drain(..).filter(|item| item.coverage > 0));
+        }
     }
 }
 

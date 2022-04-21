@@ -94,33 +94,22 @@ extern "C" fn main() {
         }
         None => {
             eprintln!("Performing recoverage");
-            for input in fazi.recoverage_queue.drain(..) {
+
+            fazi.perform_recoverage(|input| {
                 unsafe {
                     run_input(input.as_ptr(), input.len());
                 }
-            }
-
-            update_coverage();
+            });
         }
     }
 
     eprintln!("Performing fuzzing");
-    loop {
-        fazi.start_iteration();
-        let input = fazi.input.as_ptr();
-        let len = fazi.input.len();
 
-        let res = unsafe { run_input(input, len) };
-
-        fazi.end_iteration(res != 0);
-
-        if let Some(max_iters) = fazi.options.max_iters {
-            if max_iters == fazi.iterations {
-                eprintln!("Maximum number of iterations reached");
-                break;
-            }
-        }
-    }
+    fazi.fuzz(|input| {
+        let input_ptr = input.as_ptr();
+        let len = input.len();
+        unsafe { run_input(input_ptr, len) };
+    });
 
     eprintln!("Done fuzzing!");
 }
@@ -252,6 +241,7 @@ impl<R: Rng> Fazi<R> {
         } else {
             self.mutate_input()
         };
+
         let mut constants = COMPARISON_OPERANDS
             .get()
             .expect("failed to get CONSTANTS")
@@ -259,6 +249,7 @@ impl<R: Rng> Fazi<R> {
             .expect("failed to lock CONSTANTS");
         constants.clear();
         drop(constants);
+
         self.mutations.push(mutation);
         self.current_mutation_depth += 1;
 

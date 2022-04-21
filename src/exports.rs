@@ -37,17 +37,21 @@ pub extern "C" fn fazi_next_recoverage_testcase(data: *mut *const u8, len: *mut 
         .lock()
         .expect("could not lock FAZI");
 
-    update_coverage();
+    fazi.recoverage_testcase_end();
 
     // TODO: lifetime issues if the corpus entries are dropped before the caller
     // finishes using the data. This shouldn't happen because technically the corpus
     // entires are "static" (i.e. lifetime of the fazi object)
     if let Some(input) = fazi.recoverage_queue.pop() {
+        fazi.last_recoverage_input = Some(input.clone());
+
         unsafe {
             data.write(input.as_ptr());
             len.write(input.len());
         }
     } else {
+        fazi.recoverage_testcase_end();
+
         unsafe {
             data.write(std::ptr::null_mut());
             len.write(0);
