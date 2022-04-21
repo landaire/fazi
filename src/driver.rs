@@ -58,13 +58,6 @@ pub(crate) static mut INPUTS_DIR: Option<PathBuf> = None;
 extern "C" fn main() {
     fazi_initialize();
 
-    let mut fazi = FAZI
-        .get()
-        .expect("FAZI not initialized")
-        .lock()
-        .expect("could not lock FAZI");
-
-    fazi.set_options(RuntimeOptions::parse());
     let run_input = libfuzzer_runone_fn();
     let user_initialize = libfuzzer_initialize_fn();
     if let Some(user_initialize) = user_initialize {
@@ -79,6 +72,14 @@ extern "C" fn main() {
             );
         }
     }
+
+    let mut fazi = FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
+
+    fazi.restore_inputs();
 
     match fazi.options.command.as_ref() {
         Some(Command::Repro { file_path }) => {
