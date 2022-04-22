@@ -718,6 +718,7 @@ impl<R: Rng> Fazi<R> {
         enum SubStrategy {
             InterestingNumber,
             Add,
+            Subtract,
             Replace,
         }
 
@@ -739,6 +740,7 @@ impl<R: Rng> Fazi<R> {
         let sub_strategy_choices = [
             SubStrategy::InterestingNumber,
             SubStrategy::Add,
+            SubStrategy::Subtract,
             SubStrategy::Replace,
         ];
 
@@ -776,7 +778,7 @@ impl<R: Rng> Fazi<R> {
                         BIT_WIDTH,
                         new_bytes.as_mut_slice(),
                     ),
-                    SubStrategy::Add => {
+                    SubStrategy::Add | SubStrategy::Subtract => {
                         let mut input_as_int = if is_different_endianness {
                             <$ty>::from_be_bytes(
                                 input_range
@@ -795,7 +797,11 @@ impl<R: Rng> Fazi<R> {
                             // negate this number
                             input_as_int = (!input_as_int).wrapping_add(1);
                         } else {
-                            input_as_int = input_as_int.wrapping_add(add);
+                            if matches!(sub_strategy_choice, SubStrategy::Add) {
+                                input_as_int = input_as_int.wrapping_add(add);
+                            } else {
+                                input_as_int = input_as_int.wrapping_sub(add);
+                            }
                         }
 
                         new_bytes.copy_from_slice(input_as_int.to_ne_bytes().as_slice());
