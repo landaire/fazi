@@ -74,10 +74,8 @@ pub struct Fazi<R: Rng> {
     pub(crate) current_mutation_depth: usize,
     /// Mutations applied to the current input
     pub(crate) mutations: Vec<MutationStrategy>,
-    /// Hard stop upper bound for an input size
-    pub(crate) max_input_size: usize,
     /// The maximum input length at this time
-    pub(crate) current_max_mutation_len: usize,
+    pub(crate) current_max_input_len: usize,
     /// Counter for when we last updated the max input length
     pub(crate) last_corpus_update_run: usize,
     /// The last item that was run through recoverage
@@ -99,9 +97,8 @@ impl Default for Fazi<StdRng> {
             recoverage_queue: Default::default(),
             current_mutation_depth: 4,
             mutations: Default::default(),
-            max_input_size: 64000,
             last_corpus_update_run: 0,
-            current_max_mutation_len: 0,
+            current_max_input_len: 4,
             last_recoverage_input: None,
         }
     }
@@ -144,9 +141,8 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             recoverage_queue: Default::default(),
             current_mutation_depth: 0,
             mutations: Default::default(),
-            max_input_size: 64000,
             last_corpus_update_run: 0,
-            current_max_mutation_len: 4,
+            current_max_input_len: 4,
             last_recoverage_input: None,
         }
     }

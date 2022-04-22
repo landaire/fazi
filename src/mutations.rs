@@ -194,7 +194,7 @@ impl<R: Rng> Fazi<R> {
 
     /// Inserts a single random byte in the input
     fn insert_byte(&mut self) -> MutationResult {
-        if self.input.len() == self.current_max_mutation_len {
+        if self.input.len() == self.current_max_input_len {
             return Err(());
         }
 
@@ -215,7 +215,7 @@ impl<R: Rng> Fazi<R> {
     /// Inserts multiple random bytes in the input. These bytes may be
     /// repeated or all random.
     fn insert_bytes(&mut self, ignore_max: bool) -> MutationResult {
-        if !ignore_max && self.input.len() == self.current_max_mutation_len {
+        if !ignore_max && self.input.len() == self.current_max_input_len {
             return Err(());
         }
 
@@ -226,9 +226,9 @@ impl<R: Rng> Fazi<R> {
         };
 
         let max_count = if ignore_max {
-            std::cmp::max(4, self.max_input_size)
+            std::cmp::max(4, self.current_max_input_len)
         } else {
-            std::cmp::min(self.max_input_size, 128)
+            std::cmp::min(self.current_max_input_len, 128)
         };
 
         let count: usize = self.rng.gen_range(2..max_count);
@@ -847,7 +847,7 @@ impl<R: Rng> Fazi<R> {
             &original_input,
             new_input,
             &mut self.rng,
-            self.current_max_mutation_len,
+            self.current_max_input_len,
         )
     }
 
@@ -868,7 +868,7 @@ impl<R: Rng> Fazi<R> {
             &original_input.data,
             target_input,
             &mut self.rng,
-            self.current_max_mutation_len,
+            self.current_max_input_len,
         )
     }
 

@@ -127,8 +127,8 @@ impl<R: Rng> Fazi<R> {
 
     /// Updates the maximum length that we can extend the input to
     pub(crate) fn update_max_size(&mut self) {
-        if self.options.len_control > 0 && self.current_max_mutation_len < self.max_input_size {
-            let max_mutation_len: usize = self.max_input_size;
+        if self.options.len_control > 0 && self.current_max_input_len < self.options.max_input_len {
+            let max_mutation_len: usize = self.current_max_input_len;
             let len_control: u32 = self
                 .options
                 .len_control;
@@ -140,13 +140,13 @@ impl<R: Rng> Fazi<R> {
             if self.iterations - self.last_corpus_update_run > factor {
                 let new_max_mutation_len =
                     max_mutation_len + (log(max_mutation_len as u32) as usize);
-                self.max_input_size =
+                self.current_max_input_len =
                     std::cmp::min(new_max_mutation_len, self.options.max_input_len);
-                    println!("{}", self.max_input_size);
+                self.last_corpus_update_run = self.iterations;
             }
         }
 
-        self.current_max_mutation_len = std::cmp::max(self.input.len(), self.max_input_size);
+        self.current_max_input_len = std::cmp::max(self.input.len(), self.current_max_input_len);
     }
 
     /// Performs tasks necessary immediately after an input has been passed off
