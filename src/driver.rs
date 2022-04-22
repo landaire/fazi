@@ -141,6 +141,7 @@ impl<R: Rng> Fazi<R> {
                     max_mutation_len + (max_mutation_len_f64.log10() as usize);
                 self.max_input_size =
                     std::cmp::min(new_max_mutation_len, self.options.max_input_len);
+                    println!("{}", self.max_input_size);
             }
         }
 

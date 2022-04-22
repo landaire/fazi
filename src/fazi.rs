@@ -97,9 +97,9 @@ impl Default for Fazi<StdRng> {
             iterations: 0,
             min_input_size: None,
             recoverage_queue: Default::default(),
-            current_mutation_depth: 0,
+            current_mutation_depth: 4,
             mutations: Default::default(),
-            max_input_size: 4,
+            max_input_size: 64000,
             last_corpus_update_run: 0,
             current_max_mutation_len: 0,
             last_recoverage_input: None,
@@ -144,9 +144,9 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             recoverage_queue: Default::default(),
             current_mutation_depth: 0,
             mutations: Default::default(),
-            max_input_size: 4,
+            max_input_size: 64000,
             last_corpus_update_run: 0,
-            current_max_mutation_len: 0,
+            current_max_mutation_len: 4,
             last_recoverage_input: None,
         }
     }
