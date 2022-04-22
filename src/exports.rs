@@ -6,7 +6,7 @@ use std::{
 use clap::StructOpt;
 
 use crate::{
-    driver::{update_coverage, FAZI, FAZI_INITIALIZED, COMPARISON_OPERANDS},
+    driver::{update_coverage, FAZI, FAZI_INITIALIZED, COMPARISON_OPERANDS, INPUTS_DIR, CRASHES_DIR, INPUTS_EXTENSION},
     Fazi, options::RuntimeOptions,
 };
 
@@ -34,6 +34,21 @@ pub extern "C" fn fazi_init_signal_handler() {
         .expect("could not lock FAZI");
 
     fazi.setup_signal_handler();
+}
+
+#[no_mangle]
+/// Sets up Fazi's corpus/crash artifact extension
+pub extern "C" fn fazi_set_artifact_extension(extension: *const libc::c_char) {
+    let mut fazi = FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
+
+    let extension = unsafe { CStr::from_ptr(extension) };
+
+    fazi.options.artifact_extension = extension.to_string_lossy().into_owned().into();
+    unsafe { INPUTS_EXTENSION = fazi.options.artifact_extension.clone() };
 }
 
 #[no_mangle]
@@ -119,6 +134,7 @@ pub extern "C" fn fazi_set_corpus_dir(dir: *const libc::c_char) {
     let dir = unsafe { CStr::from_ptr(dir) };
 
     fazi.options.corpus_dir = dir.to_string_lossy().into_owned().into();
+    unsafe { INPUTS_DIR = Some(fazi.options.corpus_dir.clone()) };
 }
 
 #[no_mangle]
@@ -133,6 +149,7 @@ pub extern "C" fn fazi_set_crashes_dir(dir: *const libc::c_char) {
     let dir = unsafe { CStr::from_ptr(dir) };
 
     fazi.options.crashes_dir = dir.to_string_lossy().into_owned().into();
+    unsafe { CRASHES_DIR = Some(fazi.options.crashes_dir.clone()) };
 }
 
 #[no_mangle]
