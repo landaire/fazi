@@ -9,7 +9,7 @@ use rand::Rng;
 use signal_hook::iterator::Signals;
 
 use crate::{
-    driver::{handle_crash, save_input, CRASHES_DIR, INPUTS_DIR, LAST_INPUT},
+    driver::{handle_crash, save_input, CRASHES_DIR, INPUTS_DIR, LAST_INPUT, INPUTS_EXTENSION},
     weak_imports::sanitizer_set_death_callback_fn,
     Fazi,
 };
@@ -22,6 +22,7 @@ impl<R: Rng> Fazi<R> {
 
         unsafe { CRASHES_DIR = Some(self.options.crashes_dir.clone()) };
         unsafe { INPUTS_DIR = Some(self.options.corpus_dir.clone()) };
+        unsafe { INPUTS_EXTENSION = self.options.artifact_extension.clone() };
 
         if let Some(set_death_callback) = sanitizer_set_death_callback_fn() {
             unsafe {
@@ -60,10 +61,12 @@ impl<R: Rng> Fazi<R> {
 pub(crate) extern "C" fn death_callback() {
     let crashes_dir: &Path = unsafe { CRASHES_DIR.as_ref().expect("CRASHES_DIR not initialized") };
     let corpus_dir: &Path = unsafe { INPUTS_DIR.as_ref().expect("INPUTS_DIR not initialized") };
+    let extension: Option<&String> = unsafe { INPUTS_EXTENSION.as_ref() };
+    let extension = extension.map(|e| e.as_ref());
 
     if let Some(last_input) = unsafe { LAST_INPUT.take() } {
-        handle_crash(crashes_dir.as_ref(), last_input.as_slice());
-        save_input(corpus_dir.as_ref(), last_input.as_slice());
+        handle_crash(crashes_dir.as_ref(), extension, last_input.as_slice());
+        save_input(corpus_dir.as_ref(), extension, last_input.as_slice());
     }
 
     std::process::abort();

@@ -74,8 +74,6 @@ impl MutationStrategy {
             MutationStrategy::CopyPart,
             MutationStrategy::CrossOver,
         ];
-        // Missing:
-        // MutationStrategy::CrossOver,
 
         let mutation_group = MutationGroup::Any;
         match mutation_group {
@@ -122,7 +120,12 @@ impl<R: Rng> Fazi<R> {
 
     /// Perform a random mutation strategy on the current input
     pub(crate) fn mutate_input(&mut self) -> MutationStrategy {
-        let mut mutation_strategy = MutationStrategy::random(&mut self.rng);
+        // For small inputs we should give a small % to just directly use dictionary values
+        let mut mutation_strategy = if self.input.len() < 1024 && self.rng.gen_bool(0.30) {
+            MutationStrategy::UseCmpValue
+        } else {
+            MutationStrategy::random(&mut self.rng)
+        };
 
         loop {
             let mutation_result = match mutation_strategy {

@@ -52,6 +52,7 @@ pub(crate) static PC_INFO: SyncOnceCell<Mutex<Vec<&'static [PcEntry]>>> = SyncOn
 pub(crate) static mut LAST_INPUT: Option<Arc<Vec<u8>>> = None;
 pub(crate) static mut CRASHES_DIR: Option<PathBuf> = None;
 pub(crate) static mut INPUTS_DIR: Option<PathBuf> = None;
+pub(crate) static mut INPUTS_EXTENSION: Option<String> = None;
 
 #[cfg(feature = "main_entrypoint")]
 #[no_mangle]
@@ -79,7 +80,9 @@ extern "C" fn main() {
         .lock()
         .expect("could not lock FAZI");
 
+    fazi.set_options(RuntimeOptions::parse());
     fazi.restore_inputs();
+    fazi.setup_signal_handler();
 
     match fazi.options.command.as_ref() {
         Some(Command::Repro { file_path }) => {
@@ -203,9 +206,12 @@ impl<R: Rng> Fazi<R> {
             });
 
             let input = self.input.clone();
-            let corpus_dir = self.options.corpus_dir.clone();
+            let corpus_dir: &Path = unsafe { INPUTS_DIR.as_ref().expect("INPUTS_DIR not initialized") };
+            let extension: Option<&String> = unsafe { INPUTS_EXTENSION.as_ref() };
+            let extension = extension.map(|e| e.as_ref());
+
             std::thread::spawn(move || {
-                save_input(corpus_dir.as_ref(), input.as_slice());
+                save_input(corpus_dir.as_ref(), extension, input.as_slice());
             });
 
             self.current_mutation_depth = 0;
@@ -309,12 +315,15 @@ pub(crate) fn update_coverage() -> (usize, usize, usize) {
     (coverage.len(), old_coverage, input_coverage)
 }
 
-pub(crate) fn handle_crash(crashes_dir: &Path, input: &[u8]) {
+pub(crate) fn handle_crash(crashes_dir: &Path, extension: Option<&str>, input: &[u8]) {
     let mut hasher = Sha1::new();
     hasher.update(input);
     let result = hasher.finalize();
     let filename = hex::encode(result.as_slice());
-    let crash_file_path = crashes_dir.join(format!("crash-{}", filename));
+    let mut crash_file_path = crashes_dir.join(format!("crash-{}", filename));
+    if let Some(extension) = extension {
+        crash_file_path.set_extension(extension);
+    }
 
     eprintln!("Saving crash to {:?}", crash_file_path);
     ensure_parent_dir_exists(crash_file_path.as_ref());
@@ -322,12 +331,15 @@ pub(crate) fn handle_crash(crashes_dir: &Path, input: &[u8]) {
     std::fs::write(crash_file_path, input).expect("failed to save crash file!");
 }
 
-pub(crate) fn save_input(corpus_dir: &Path, input: &[u8]) {
+pub(crate) fn save_input(corpus_dir: &Path, extension: Option<&str>, input: &[u8]) {
     let mut hasher = Sha1::new();
     hasher.update(input);
     let result = hasher.finalize();
     let filename = hex::encode(result.as_slice());
-    let corpus_file_path = corpus_dir.join(format!("input-{}", filename));
+    let mut corpus_file_path = corpus_dir.join(format!("input-{}", filename));
+    if let Some(extension) = extension {
+        corpus_file_path.set_extension(extension);
+    }
 
     eprintln!("Saving corpus input to {:?}", corpus_file_path);
     ensure_parent_dir_exists(corpus_file_path.as_ref());

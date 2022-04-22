@@ -44,6 +44,10 @@ pub struct RuntimeOptions {
     #[clap(long)]
     pub max_iters: Option<usize>,
 
+    /// File extension to apply to saved input/crash artifacts
+    #[clap(long)]
+    pub artifact_extension: Option<String>,
+
     #[clap(subcommand)]
     pub command: Option<Command>,
 }
@@ -59,6 +63,7 @@ impl Default for RuntimeOptions {
             max_iters: None,
             seed: None,
             command: None,
+            artifact_extension: None,
         }
     }
 }

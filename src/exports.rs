@@ -16,15 +16,24 @@ pub extern "C" fn fazi_initialize() {
     if FAZI_INITIALIZED.load(Ordering::Relaxed) {
         return;
     }
-    let mut fazi = Fazi::default();
-
-    fazi.restore_inputs();
-    fazi.setup_signal_handler();
+    let fazi = Fazi::default();
 
     fazi.initialize_globals();
 
     FAZI.set(Mutex::new(fazi))
         .expect("FAZI already initialized");
+}
+
+#[no_mangle]
+/// Sets up Fazi's signal handlers
+pub extern "C" fn fazi_init_signal_handler() {
+    let fazi = FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
+
+    fazi.setup_signal_handler();
 }
 
 #[no_mangle]
