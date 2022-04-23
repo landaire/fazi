@@ -179,10 +179,7 @@ impl<R: Rng + SeedableRng> Fazi<R> {
 
     /// Iterate over the inputs read from disk and replay them back.
     pub fn perform_recoverage(&mut self, callback: impl Fn(&[u8])) {
-        let recoverage_queue = self.recoverage_queue.clone();
-        self.recoverage_queue.clear();
-
-        for input in recoverage_queue{
+        while let Some(input) = self.recoverage_queue.pop() {
             poison_input(&input);
 
             (callback)(input.as_slice());
