@@ -239,7 +239,7 @@ impl<R: Rng> Fazi<R> {
         let byte_iter: Box<dyn Iterator<Item = u8>> = if self.rng.gen() {
             Box::new(std::iter::repeat(self.rng.gen()).take(count))
         } else {
-            Box::new(std::iter::from_fn(|| self.rng.gen()).take(count))
+            Box::new(std::iter::from_fn(|| Some(self.rng.gen())).take(count))
         };
 
         let input = Arc::make_mut(&mut self.input);
