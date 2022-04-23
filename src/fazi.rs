@@ -238,50 +238,66 @@ impl<R: Rng + SeedableRng> Fazi<R> {
                 }
             }
 
-            // Create our message queue
-            let (send, recv) = unbounded();
+            // Create our message queue for sharing and consuming corpus items from other workers
+            let (ipc_corpus_sharing_send, ipc_corpus_sharing_recv) = unbounded();
+            // Create our message queue for sending items to other workers and
             let (new_inputs_send, new_inputs_recv_queue) = unbounded();
             new_inputs_recv = Some(new_inputs_recv_queue);
 
-            IPC_QUEUE.set(send).expect("IPC_QUEUE alerady initialized");
-            let mut senders = Vec::with_capacity(num_processes);
-            let mut receivers = Vec::with_capacity(num_processes);
-            for _ in 0..num_processes {
-                let (send, recv) = unbounded();
-                senders.push(Arc::new(send));
-                receivers.push(Arc::new(recv));
-            }
+            IPC_QUEUE
+                .set(ipc_corpus_sharing_send)
+                .expect("IPC_QUEUE alerady initialized");
 
+            // Get the unix socket paths
             let (client_to_server_socket_path, rebroadcast_path) = server_socket_paths(server_id);
-            if client_to_server_socket_path.exists() {
-                std::fs::remove_file(&client_to_server_socket_path)
-                    .expect("could not remove existing socket");
-            }
-            if rebroadcast_path.exists() {
-                std::fs::remove_file(&rebroadcast_path)
-                    .expect("could not remove existing rebroadcast socket");
-            }
+
+            // if client_to_server_socket_path.exists() {
+            //     std::fs::remove_file(&client_to_server_socket_path)
+            //         .expect("could not remove existing socket");
+            // }
+
+            // if rebroadcast_path.exists() {
+            //     std::fs::remove_file(&rebroadcast_path)
+            //         .expect("could not remove existing rebroadcast socket");
+            // }
 
             if is_parent {
+                let mut senders = Vec::with_capacity(num_processes);
+                let mut receivers = Vec::with_capacity(num_processes);
+                for _ in 0..num_processes {
+                    let (send, recv) = unbounded();
+                    senders.push(Arc::new(send));
+                    receivers.push(Arc::new(recv));
+                }
+
                 create_server(
                     client_to_server_socket_path.as_ref(),
                     Arc::new(senders),
                     new_inputs_send,
                 )
                 .expect("failed to create server");
+
                 create_rebroadcast_server_worker(
                     rebroadcast_path.as_ref(),
                     Arc::new(receivers),
-                    recv,
+                    ipc_corpus_sharing_recv,
                 )
                 .expect("failed to create server");
             } else {
-                create_client(client_to_server_socket_path.as_ref(), recv)
-                    .expect("failed to create client");
+                println!("Creating client");
+                create_client(
+                    client_to_server_socket_path.as_ref(),
+                    ipc_corpus_sharing_recv,
+                )
+                .expect("failed to create client");
+
+                println!("Creating rebroadcast client");
                 create_rebroadcast_client(rebroadcast_path.as_ref(), new_inputs_send)
                     .expect("failed to create rebroadcast client");
             }
         }
+
+        println!("Done! We are a parent? {}", is_parent);
         // Ensure we update our coverage numbers to avoid misattributing any noise
         // that may have occurred before we started fuzzing
         update_coverage();

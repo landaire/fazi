@@ -1,7 +1,7 @@
 use std::{
     error::Error,
     fs::File,
-    io::{self, Read, Write},
+    io::{self, Read, Write, ErrorKind},
     lazy::SyncOnceCell,
     ops::Deref,
     path::{Path, PathBuf},
@@ -38,11 +38,25 @@ pub(crate) fn create_client(
     socket_path: &Path,
     ipc_channel: crossbeam_channel::Receiver<IpcMessage>,
 ) -> Result<(), Box<dyn Error>> {
-    while !socket_path.exists() {
-        std::thread::sleep(Duration::from_millis(250));
+    println!("Creating client at {:?}", socket_path);
+    let mut conn: LocalSocketStream;
+    loop {
+        // Wait until the server spins up
+        match LocalSocketStream::connect(socket_path) {
+            Ok(successful_conn) => {
+                conn = successful_conn;
+                break;
+            }
+            Err(e) if e.kind() == ErrorKind::NotFound => {
+                std::thread::sleep(Duration::from_millis(250));
+            }
+            Err(e) => {
+                return Err(e)?;
+            }
+        }
     }
 
-    let mut conn = LocalSocketStream::connect(socket_path)?;
+    println!("client connected");
 
     thread::Builder::new()
         .name("IPC-Client".to_owned())
@@ -78,7 +92,9 @@ pub(crate) fn create_server(
     rebroadcasting_senders: Arc<Vec<Arc<Sender<IpcMessage>>>>,
     new_input_names: crossbeam_channel::Sender<(PathBuf, usize)>,
 ) -> Result<(), Box<dyn Error>> {
+    println!("Creating server at {:?}", socket_path);
     let listener = LocalSocketListener::bind(socket_path)?;
+    println!("Server created!");
     let mut num_clients = 0;
     let mut join_handles = vec![];
 
@@ -205,11 +221,19 @@ pub(crate) fn create_rebroadcast_client(
     socket_path: &Path,
     new_input_names: crossbeam_channel::Sender<(PathBuf, usize)>,
 ) -> Result<(), Box<dyn Error>> {
-    while !socket_path.exists() {
-        std::thread::sleep(Duration::from_millis(250));
+    let mut conn: LocalSocketStream;
+    loop {
+        // Wait until the server spins up
+        match LocalSocketStream::connect(socket_path) {
+            Ok(successful_conn) => {
+                conn = successful_conn;
+                break;
+            }
+            _ => {
+                std::thread::sleep(Duration::from_millis(250));
+            }
+        }
     }
-
-    let mut conn = LocalSocketStream::connect(socket_path)?;
 
     thread::Builder::new()
         .name("IPC-Client".to_owned())
