@@ -98,10 +98,8 @@ extern "C" fn main() {
         None => {
             eprintln!("Performing recoverage");
 
-            fazi.perform_recoverage(|input| {
-                unsafe {
-                    run_input(input.as_ptr(), input.len());
-                }
+            fazi.perform_recoverage(|input| unsafe {
+                run_input(input.as_ptr(), input.len());
             });
         }
     }
@@ -132,9 +130,7 @@ impl<R: Rng> Fazi<R> {
     pub(crate) fn update_max_size(&mut self) {
         if self.options.len_control > 0 && self.current_max_input_len < self.options.max_input_len {
             let max_mutation_len: usize = self.current_max_input_len;
-            let len_control: u32 = self
-                .options
-                .len_control;
+            let len_control: u32 = self.options.len_control;
 
             fn log(val: u32) -> u32 {
                 ((std::mem::size_of_val(&val) * 8) as u32) - val.leading_zeros() - 1
@@ -172,8 +168,9 @@ impl<R: Rng> Fazi<R> {
         }
 
         let can_request_more_data = !self.min_input_size.is_some();
+        let only_replay = self.options.replay_percentage.map(|p| p >= 1.0).unwrap_or(false);
 
-        if old_coverage != new_coverage {
+        if !only_replay && old_coverage != new_coverage {
             eprintln!(
                 "old coverage: {}, new coverage: {}, mutations: {:?}",
                 old_coverage, new_coverage, self.mutations
@@ -206,7 +203,8 @@ impl<R: Rng> Fazi<R> {
             });
 
             let input = self.input.clone();
-            let corpus_dir: &Path = unsafe { INPUTS_DIR.as_ref().expect("INPUTS_DIR not initialized") };
+            let corpus_dir: &Path =
+                unsafe { INPUTS_DIR.as_ref().expect("INPUTS_DIR not initialized") };
             let extension: Option<&String> = unsafe { INPUTS_EXTENSION.as_ref() };
             let extension = extension.map(|e| e.as_ref());
 
@@ -216,10 +214,15 @@ impl<R: Rng> Fazi<R> {
 
             self.current_mutation_depth = 0;
             self.mutations.clear();
-        } else if self.current_mutation_depth == self.options.max_mutation_depth
-            && !(need_more_data && can_request_more_data)
+        } else if only_replay || ((self.current_mutation_depth == self.options.max_mutation_depth
+            || self
+                .options
+                .replay_percentage
+                .map(|p| self.rng.gen_bool(p))
+                .unwrap_or(false))
+            && !(need_more_data && can_request_more_data))
         {
-            let next_input = if self.rng.gen() {
+            let next_input = if self.rng.gen_bool(0.10) {
                 self.corpus.peek()
             } else {
                 self.corpus
@@ -244,10 +247,18 @@ impl<R: Rng> Fazi<R> {
             }
         }
 
-        let mutation = if need_more_data && can_request_more_data {
-            self.extend_input()
+        let mutation = if !only_replay && need_more_data && can_request_more_data {
+            Some(self.extend_input())
         } else {
-            self.mutate_input()
+            if let Some(replay_chance) = self.options.replay_percentage {
+                if replay_chance >= 1.0 || self.rng.gen_bool(replay_chance) {
+                    None
+                } else {
+                    Some(self.mutate_input())
+                }
+            } else {
+                Some(self.mutate_input())
+            }
         };
 
         let mut constants = COMPARISON_OPERANDS
@@ -258,7 +269,9 @@ impl<R: Rng> Fazi<R> {
         constants.clear();
         drop(constants);
 
-        self.mutations.push(mutation);
+        if let Some(mutation) = mutation {
+            self.mutations.push(mutation);
+        }
         self.current_mutation_depth += 1;
 
         self.iterations += 1;

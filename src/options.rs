@@ -48,6 +48,10 @@ pub struct RuntimeOptions {
     #[clap(long)]
     pub artifact_extension: Option<String>,
 
+    /// Percent of time we should send a testcase unmodified
+    #[clap(long)]
+    pub replay_percentage: Option<f64>,
+
     #[clap(subcommand)]
     pub command: Option<Command>,
 }
@@ -63,6 +67,7 @@ impl Default for RuntimeOptions {
             max_iters: None,
             seed: None,
             command: None,
+            replay_percentage: None,
             artifact_extension: None,
         }
     }

@@ -1,12 +1,12 @@
 use std::{
     ffi::CStr,
-    sync::{atomic::Ordering, Mutex},
+    sync::{atomic::Ordering, Mutex, Arc}, path::Path,
 };
 
 use clap::StructOpt;
 
 use crate::{
-    driver::{update_coverage, FAZI, FAZI_INITIALIZED, COMPARISON_OPERANDS, INPUTS_DIR, CRASHES_DIR, INPUTS_EXTENSION},
+    driver::{update_coverage, FAZI, FAZI_INITIALIZED, COMPARISON_OPERANDS, INPUTS_DIR, CRASHES_DIR, INPUTS_EXTENSION, save_input},
     Fazi, options::RuntimeOptions,
 };
 
@@ -209,4 +209,36 @@ pub extern "C" fn fazi_restore_inputs() {
         .expect("could not lock FAZI");
 
     fazi.restore_inputs();
+}
+
+#[no_mangle]
+/// Parses args from the command line
+pub extern "C" fn fazi_enable_replay_mode(percentage: std::os::raw::c_float) {
+    let mut fazi = FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
+
+    fazi.options.replay_percentage = Some(percentage.into());
+}
+
+#[no_mangle]
+/// Parses args from the command line
+pub extern "C" fn fazi_add_corpus_entry(data: *const u8, len: usize) {
+    let mut fazi = FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
+
+    let data = unsafe { std::slice::from_raw_parts(data, len) };
+    let data: Arc<Vec<u8>> = Arc::new(data.into());
+    let corpus_dir: &Path =
+        unsafe { INPUTS_DIR.as_ref().expect("INPUTS_DIR not initialized") };
+    let extension: Option<&String> = unsafe { INPUTS_EXTENSION.as_ref() };
+    let extension = extension.map(|e| e.as_ref());
+    save_input(corpus_dir, extension, data.as_ref());
+
+    fazi.corpus.push(crate::Input { coverage: 1, data });
 }
