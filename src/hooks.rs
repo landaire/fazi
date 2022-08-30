@@ -1,13 +1,13 @@
 use crate::sancov::{caller_address, return_address};
 use std::ffi::CString;
-use std::lazy::SyncOnceCell;
 use std::os::raw::c_int;
 
 use crate::sancov::__sanitizer_weak_hook_memcmp;
 use libc::c_void;
+use once_cell::sync::OnceCell;
 
 type MemCmpFn = unsafe extern "C" fn(*const libc::c_char, *const libc::c_char, usize) -> c_int;
-static MEMCMP_ADDRESS: SyncOnceCell<MemCmpFn> = SyncOnceCell::new();
+static MEMCMP_ADDRESS: OnceCell<MemCmpFn> = OnceCell::new();
 
 #[no_mangle]
 #[cfg(feature = "hook_memcmp")]

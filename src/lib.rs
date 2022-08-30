@@ -1,5 +1,4 @@
 #![feature(linkage)]
-#![feature(once_cell)]
 #![feature(link_llvm_intrinsics)]
 #![doc = include_str!("../README.md")]
 

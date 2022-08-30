@@ -1,3 +1,4 @@
+use once_cell::sync::OnceCell;
 use rand::{
     prelude::{IteratorRandom, StdRng},
     Rng,
@@ -15,7 +16,6 @@ use crate::{
 use std::{
     collections::HashSet,
     ffi::CString,
-    lazy::SyncOnceCell,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, AtomicU8, Ordering},
@@ -28,23 +28,23 @@ use clap::StructOpt;
 use crate::options::Command;
 
 /// Global map of comparison operands from SanCov instrumentation
-pub(crate) static COMPARISON_OPERANDS: SyncOnceCell<Mutex<ComparisonOperandMap>> =
-    SyncOnceCell::new();
+pub(crate) static COMPARISON_OPERANDS: OnceCell<Mutex<ComparisonOperandMap>> =
+    OnceCell::new();
 /// Set of PCs that the fuzzer has reached
-pub(crate) static COVERAGE: SyncOnceCell<Mutex<HashSet<usize>>> = SyncOnceCell::new();
+pub(crate) static COVERAGE: OnceCell<Mutex<HashSet<usize>>> = OnceCell::new();
 /// Set of PCs that the fuzzer has reached for this testcase
-pub(crate) static TESTCASE_COVERAGE: SyncOnceCell<Mutex<HashSet<usize>>> = SyncOnceCell::new();
+pub(crate) static TESTCASE_COVERAGE: OnceCell<Mutex<HashSet<usize>>> = OnceCell::new();
 /// The global [`Fazi`] instance. We need to keep a global pointer as the SanCov and
 /// other C FFI entrypoints know nothing about us, but we need to access our
 /// current state
-pub(crate) static FAZI: SyncOnceCell<Mutex<Fazi<StdRng>>> = SyncOnceCell::new();
+pub(crate) static FAZI: OnceCell<Mutex<Fazi<StdRng>>> = OnceCell::new();
 /// Indicator if Fazi has been initialized already to avoid accidentally performing
 /// initialization tasks multiple times
 pub(crate) static FAZI_INITIALIZED: AtomicBool = AtomicBool::new(false);
 /// Inline 8bit counters used for PC coverage.
-pub(crate) static U8_COUNTERS: SyncOnceCell<Mutex<Vec<&'static [AtomicU8]>>> = SyncOnceCell::new();
+pub(crate) static U8_COUNTERS: OnceCell<Mutex<Vec<&'static [AtomicU8]>>> = OnceCell::new();
 /// PC info corresponding to the U8 counters.
-pub(crate) static PC_INFO: SyncOnceCell<Mutex<Vec<&'static [PcEntry]>>> = SyncOnceCell::new();
+pub(crate) static PC_INFO: OnceCell<Mutex<Vec<&'static [PcEntry]>>> = OnceCell::new();
 /// The most recent input that was used for fuzzing.
 /// SAFETY: This value should only ever be read from the [`signal::death_callback()`],
 /// at which point we are about to exit and the fuzzer loop should not be running,
