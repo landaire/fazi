@@ -15,7 +15,7 @@ use crate::driver::{
     clear_coverage, poison_input, unpoison_input, update_coverage, COMPARISON_OPERANDS, COVERAGE,
     COV_THREADS, FAZI_INITIALIZED, PC_INFO, U8_COUNTERS,
 };
-use crate::mutations::MutationStrategy;
+use crate::mutate::MutationStrategy;
 
 use rand::{prelude::*, SeedableRng};
 use sha2::{Digest, Sha256};
@@ -123,13 +123,13 @@ impl Fazi<StdRng> {
     }
 }
 
-impl<R: Rng + SeedableRng> Fazi<R> {
+impl<R: Rng> Fazi<R> {
     /// Create a new instance of Fazi with default settings. This differs from
     /// the [`Fazi::default()`] implementation only when the backing RNG is not
     /// a [`StdRng`].
-    pub fn new() -> Self {
+    pub fn new(rng: R) -> Self {
         Fazi {
-            rng: R::from_entropy(),
+            rng,
             input: Default::default(),
             dictionary: Default::default(),
             last_dictionary_input: None,
@@ -145,6 +145,10 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             current_max_input_len: 4,
             last_recoverage_input: None,
         }
+    }
+
+    pub fn rng_mut(&mut self) -> &mut R {
+        &mut self.rng
     }
 
     /// Load inputs from disk
