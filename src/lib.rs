@@ -12,8 +12,8 @@ pub mod exports;
 mod fazi;
 /// Function hooks for builtin functions
 mod hooks;
-/// Main mutation logic
-mod mutations;
+/// Contains the public mutation API
+mod mutate;
 /// Runtime configuration options
 mod options;
 /// SanitizerCoverage callbacks
@@ -25,4 +25,8 @@ mod weak;
 /// Weakly linked imports
 mod weak_imports;
 
+pub use crate::mutate::mutator::Mutable;
 pub use fazi::*;
+
+#[doc(hidden)]
+pub use rand;
