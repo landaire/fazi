@@ -242,3 +242,16 @@ pub extern "C" fn fazi_add_corpus_entry(data: *const u8, len: usize) {
 
     fazi.corpus.push(crate::Input { coverage: 1, data });
 }
+
+#[no_mangle]
+/// Set the max size an input can reach
+pub extern "C" fn fazi_set_max_input_len(len: usize) {
+    let mut fazi = FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
+
+    fazi.options.max_input_len = len;
+}
+
