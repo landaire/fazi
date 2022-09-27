@@ -267,7 +267,7 @@ macro_rules! handle_cmp {
             ));
         }
 
-        if $arg1.inner() <= u16::MAX.try_into().unwrap()
+        if sizeof_type >= 2 && $arg1.inner() <= u16::MAX.try_into().unwrap()
             && $arg2.inner() <= u16::MAX.try_into().unwrap()
         {
             constants.u16cov.insert((
@@ -276,7 +276,7 @@ macro_rules! handle_cmp {
             ));
         }
 
-        if $arg1.inner() <= u32::MAX.try_into().unwrap()
+        if sizeof_type >= 4 && $arg1.inner() <= u32::MAX.try_into().unwrap()
             && $arg2.inner() <= u32::MAX.try_into().unwrap()
         {
             constants.u32cov.insert((
@@ -285,8 +285,8 @@ macro_rules! handle_cmp {
             ));
         }
 
-        if $arg1.inner() <= u32::MAX.try_into().unwrap()
-            && $arg2.inner() <= u32::MAX.try_into().unwrap()
+        if sizeof_type >= 8 && $arg1.inner() <= u64::MAX.try_into().unwrap()
+            && $arg2.inner() <= u64::MAX.try_into().unwrap()
         {
             constants.u64cov.insert((
                 $arg1.try_into().expect("failed to convert to cmp args u64"),

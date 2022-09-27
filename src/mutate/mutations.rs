@@ -40,6 +40,8 @@ pub(crate) enum MutationStrategy {
     /// Use a value from SanCov coverage, attempt to find it in the current input,
     /// and replace the instance with what we think the value should be.
     UseCmpValue,
+    #[cfg(feature = "protobuf")]
+    StructuredFuzzing,
 }
 
 impl MutationStrategy {
@@ -110,6 +112,7 @@ impl MutationStrategy {
     }
 }
 
+
 impl<R: Rng> Fazi<R> {
     /// Selects a strategy that will extend the input
     pub(crate) fn extend_input(&mut self) -> MutationStrategy {
@@ -120,6 +123,12 @@ impl<R: Rng> Fazi<R> {
 
     /// Perform a random mutation strategy on the current input
     pub(crate) fn mutate_input(&mut self) -> MutationStrategy {
+        #[cfg(feature = "protobuf")]
+        {
+            if self.mutate_protobuf_input() {
+                return MutationStrategy::StructuredFuzzing;
+            }
+        }
         // For small inputs we should give a small % to just directly use dictionary values
         let mut mutation_strategy = if self.input.len() < 1024 && self.rng.gen_bool(0.30) {
             MutationStrategy::UseCmpValue
@@ -141,6 +150,7 @@ impl<R: Rng> Fazi<R> {
                 MutationStrategy::CrossOver => self.cross_over(),
                 MutationStrategy::InsertDictionaryValue => self.insert_dictionary_value(),
                 MutationStrategy::UseCmpValue => self.use_value_from_cmp_instruction(),
+                MutationStrategy::StructuredFuzzing => panic!("StructuredFuzzing should not be chosen"),
             };
 
             if mutation_result.is_ok() {
