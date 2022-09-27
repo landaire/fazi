@@ -2,7 +2,10 @@ use std::{
     collections::BinaryHeap,
     fs, panic,
     path::{Path, PathBuf},
-    sync::{atomic::Ordering, Arc},
+    sync::{
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc,
+    },
 };
 
 use crate::{
@@ -47,7 +50,6 @@ impl Ord for Input {
 }
 
 /// Main Fazi structure that holds our state.
-#[derive(Debug)]
 pub struct Fazi<R: Rng> {
     pub(crate) rng: R,
     /// Current input
@@ -80,6 +82,31 @@ pub struct Fazi<R: Rng> {
     pub(crate) last_corpus_update_run: usize,
     /// The last item that was run through recoverage
     pub(crate) last_recoverage_input: Option<Arc<Vec<u8>>>,
+    #[cfg(feature = "protobuf")]
+    pub(crate) protobuf_mutate_callback: Option<fn(&[u8], &mut Fazi<R>) -> Vec<u8>>,
+}
+
+impl<R: Rng + std::fmt::Debug> std::fmt::Debug for Fazi<R> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Fazi")
+            .field("rng", &self.rng)
+            .field("input", &self.input)
+            .field("dictionary", &self.dictionary)
+            .field("last_dictionary_input", &self.last_dictionary_input)
+            .field("corpus", &self.corpus)
+            .field("restored_corpus", &self.restored_corpus)
+            .field("options", &self.options)
+            .field("iterations", &self.iterations)
+            .field("min_input_size", &self.min_input_size)
+            .field("recoverage_queue", &self.recoverage_queue)
+            .field("current_mutation_depth", &self.current_mutation_depth)
+            .field("mutations", &self.mutations)
+            .field("current_max_input_len", &self.current_max_input_len)
+            .field("last_corpus_update_run", &self.last_corpus_update_run)
+            .field("last_recoverage_input", &self.last_recoverage_input)
+            .finish()
+        //field("protobuf_mutate_callback", &self.protobuf_mutate_callback.map_or("None", |_| "Some(callback)"))
+    }
 }
 
 impl Default for Fazi<StdRng> {
@@ -100,6 +127,8 @@ impl Default for Fazi<StdRng> {
             last_corpus_update_run: 0,
             current_max_input_len: 4,
             last_recoverage_input: None,
+            #[cfg(feature = "protobuf")]
+            protobuf_mutate_callback: None,
         }
     }
 }
@@ -120,6 +149,58 @@ impl Fazi<StdRng> {
         }
 
         self.options = options;
+    }
+}
+
+const MAX_MUTATION_DEPTH: usize = 100;
+const MAX_LEAF_FIELDS: usize = 10;
+pub(crate) static MUTATION_DEPTH: AtomicUsize = AtomicUsize::new(0);
+pub(crate) static LEAF_FIELDS_MUTATED: AtomicUsize = AtomicUsize::new(0);
+pub(crate) static STOP_MUTATING: AtomicBool = AtomicBool::new(false);
+pub struct MutationGuard {
+    is_primitive_type: bool,
+}
+
+impl MutationGuard {
+    fn try_new<R: Rng>(is_primitive_type: bool, fazi: &mut Fazi<R>) -> Option<MutationGuard> {
+        // Check if we've satisfied the number of primitives we've wanted to mutate
+        let fields_mutated = LEAF_FIELDS_MUTATED.load(Ordering::SeqCst);
+        if fields_mutated == MAX_LEAF_FIELDS {
+            STOP_MUTATING.store(true, Ordering::SeqCst);
+            return None;
+        }
+
+        if is_primitive_type {
+            LEAF_FIELDS_MUTATED.fetch_add(1, Ordering::SeqCst);
+        }
+
+        let mutate_this_field = fazi.rng.gen::<bool>();
+        let stop_mutating = if fazi.rng.gen_bool(0.001) {
+            STOP_MUTATING.store(true, Ordering::SeqCst);
+            true
+        } else if mutate_this_field {
+            STOP_MUTATING.load(Ordering::SeqCst)
+        } else {
+            mutate_this_field
+        };
+
+        let guard = MutationGuard { is_primitive_type };
+
+        if MUTATION_DEPTH.fetch_add(1, Ordering::SeqCst) > MAX_MUTATION_DEPTH || stop_mutating {
+            None
+        } else {
+            Some(guard)
+        }
+    }
+}
+
+impl Drop for MutationGuard {
+    fn drop(&mut self) {
+        let value = MUTATION_DEPTH.fetch_sub(1, Ordering::SeqCst);
+        if value == 1 {
+            STOP_MUTATING.store(false, Ordering::SeqCst);
+            LEAF_FIELDS_MUTATED.store(0, Ordering::SeqCst);
+        }
     }
 }
 
@@ -144,7 +225,13 @@ impl<R: Rng> Fazi<R> {
             last_corpus_update_run: 0,
             current_max_input_len: 4,
             last_recoverage_input: None,
+            #[cfg(feature = "protobuf")]
+            protobuf_mutate_callback: None,
         }
+    }
+
+    pub fn before_mutate(&mut self, is_primitive_type: bool) -> Option<MutationGuard> {
+        MutationGuard::try_new(is_primitive_type, self)
     }
 
     pub fn rng_mut(&mut self) -> &mut R {
@@ -157,7 +244,6 @@ impl<R: Rng> Fazi<R> {
         for &path in &input_paths {
             if !path.exists() || !path.is_dir() {
                 panic!("???");
-                continue;
             }
 
             for dirent in fs::read_dir(path).expect("failed to read input directory") {

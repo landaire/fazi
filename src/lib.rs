@@ -17,6 +17,7 @@ mod hooks;
 mod mutate;
 /// Runtime configuration options
 mod options;
+mod protobuf;
 /// SanitizerCoverage callbacks
 mod sancov;
 /// Signal handling code
@@ -31,3 +32,15 @@ pub use fazi::*;
 
 #[doc(hidden)]
 pub use rand;
+use rand::rngs::StdRng;
+
+#[cfg(feature = "protobuf")]
+pub fn set_protobuf_mutate_callback(callback: fn(&[u8], &mut Fazi<StdRng>) -> Vec<u8>) {
+    let mut fazi = crate::driver::FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
+
+    fazi.protobuf_mutate_callback = Some(callback);
+}

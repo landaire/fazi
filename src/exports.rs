@@ -247,14 +247,15 @@ pub extern "C" fn fazi_add_corpus_entry(data: *const u8, len: usize) {
         .lock()
         .expect("could not lock FAZI");
 
-    let data = unsafe { std::slice::from_raw_parts(data, len) };
-    let data: Arc<Vec<u8>> = Arc::new(data.into());
-    let corpus_dir: &Path = unsafe { INPUTS_DIR.as_ref().expect("INPUTS_DIR not initialized") };
-    let extension: Option<&String> = unsafe { INPUTS_EXTENSION.as_ref() };
-    let extension = extension.map(|e| e.as_ref());
-    save_input(corpus_dir, extension, data.as_ref());
+    if let Some(corpus_dir) = unsafe { INPUTS_DIR.as_ref() } {
+        let data = unsafe { std::slice::from_raw_parts(data, len) };
+        let data: Arc<Vec<u8>> = Arc::new(data.into());
+        let extension: Option<&String> = unsafe { INPUTS_EXTENSION.as_ref() };
+        let extension = extension.map(|e| e.as_ref());
+        save_input(corpus_dir, extension, data.as_ref());
 
-    fazi.corpus.push(crate::Input { coverage: 1, data });
+        fazi.corpus.push(crate::Input { coverage: 1, data });
+    }
 }
 
 #[no_mangle]

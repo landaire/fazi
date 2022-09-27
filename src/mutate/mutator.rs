@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
+#[cfg(feature = "protobuf")]
 use protobuf::EnumOrUnknown;
 use rand::distributions::Standard;
 use rand::prelude::{Distribution, SliceRandom};
@@ -10,38 +11,7 @@ use crate::driver::COMPARISON_OPERANDS;
 use crate::Fazi;
 use paste::paste;
 
-const MAX_MUTATION_DEPTH: usize = 100;
-pub(crate) static MUTATION_DEPTH: AtomicUsize = AtomicUsize::new(0);
-pub(crate) static STOP_MUTATING: AtomicBool = AtomicBool::new(false);
-
-pub struct MutationGuard {}
-
-impl Drop for MutationGuard {
-    fn drop(&mut self) {
-        MUTATION_DEPTH.fetch_sub(1, Ordering::SeqCst);
-    }
-}
-
 pub trait Mutable {
-    fn before_mutate<R: Rng>(fazi: &mut Fazi<R>) -> Option<MutationGuard> {
-        let guard = MutationGuard {};
-        let mutate_this_field = fazi.rng.gen_bool(0.10);
-        let stop_mutating = if mutate_this_field && fazi.rng.gen_bool(0.01) {
-            STOP_MUTATING.store(true, Ordering::SeqCst);
-            true
-        } else if mutate_this_field {
-            STOP_MUTATING.load(Ordering::SeqCst)
-        } else {
-            mutate_this_field
-        };
-
-        if MUTATION_DEPTH.fetch_add(1, Ordering::SeqCst) > MAX_MUTATION_DEPTH || stop_mutating {
-            None
-        } else {
-            Some(guard)
-        }
-    }
-
     fn mutate<R: Rng>(&mut self, fazi: &mut Fazi<R>);
 }
 
@@ -167,7 +137,7 @@ fn generate_char<R: Rng>(rng: &mut R) -> char {
 
 impl Mutable for char {
     fn mutate<R: Rng>(&mut self, fazi: &mut Fazi<R>) {
-        let guard = Self::before_mutate(fazi);
+        let guard = fazi.before_mutate(true);
         if guard.is_none() {
             return;
         }
@@ -190,7 +160,7 @@ impl Mutable for char {
 impl Mutable for String {
     #[inline(always)]
     fn mutate<R: Rng>(&mut self, fazi: &mut Fazi<R>) {
-        let guard = Self::before_mutate(fazi);
+        let guard = fazi.before_mutate(true);
         if guard.is_none() {
             return;
         }
@@ -208,7 +178,7 @@ impl Mutable for String {
         if fazi.rng.gen_bool(0.10) {
             let count = fazi.rng.gen_range(1..=10);
             for _ in 0..count {
-                self.push(fazi.rng.gen());
+                self.push(generate_char(&mut fazi.rng));
             }
             return;
         }
@@ -227,9 +197,10 @@ impl Mutable for String {
                 let count = fazi.rng.gen_range(0..=chars.len());
                 let index_sampler =
                     rand::seq::index::sample(&mut fazi.rng, chars.len(), count).into_iter();
-                // Iterate these items in-place
+
+                // Change these items in-place
                 for idx in index_sampler {
-                    chars[idx].mutate(fazi);
+                    chars[idx] = generate_char(&mut fazi.rng);
                 }
             }
         }
@@ -242,7 +213,7 @@ where
 {
     #[inline(always)]
     fn mutate<R: Rng>(&mut self, fazi: &mut Fazi<R>) {
-        let guard = Self::before_mutate(fazi);
+        let guard = fazi.before_mutate(true);
         if guard.is_none() {
             return;
         }
@@ -289,11 +260,6 @@ where
 {
     #[inline(always)]
     fn mutate<R: Rng>(&mut self, fazi: &mut Fazi<R>) {
-        let guard = Self::before_mutate(fazi);
-        if guard.is_none() {
-            return;
-        }
-
         match self {
             Some(value) => {
                 value.mutate(fazi);
@@ -312,7 +278,7 @@ where
 impl Mutable for bool {
     #[inline(always)]
     fn mutate<R: Rng>(&mut self, fazi: &mut Fazi<R>) {
-        let guard = Self::before_mutate(fazi);
+        let guard = fazi.before_mutate(true);
         if guard.is_none() {
             return;
         }
@@ -323,7 +289,7 @@ impl Mutable for bool {
 impl Mutable for i8 {
     #[inline(always)]
     fn mutate<R: Rng>(&mut self, fazi: &mut Fazi<R>) {
-        let guard = Self::before_mutate(fazi);
+        let guard = fazi.before_mutate(true);
         if guard.is_none() {
             return;
         }
@@ -334,7 +300,7 @@ impl Mutable for i8 {
 impl Mutable for i16 {
     #[inline(always)]
     fn mutate<R: Rng>(&mut self, fazi: &mut Fazi<R>) {
-        let guard = Self::before_mutate(fazi);
+        let guard = fazi.before_mutate(true);
         if guard.is_none() {
             return;
         }
@@ -345,7 +311,7 @@ impl Mutable for i16 {
 impl Mutable for i32 {
     #[inline(always)]
     fn mutate<R: Rng>(&mut self, fazi: &mut Fazi<R>) {
-        let guard = Self::before_mutate(fazi);
+        let guard = fazi.before_mutate(true);
         if guard.is_none() {
             return;
         }
@@ -356,7 +322,7 @@ impl Mutable for i32 {
 impl Mutable for i64 {
     #[inline(always)]
     fn mutate<R: Rng>(&mut self, fazi: &mut Fazi<R>) {
-        let guard = Self::before_mutate(fazi);
+        let guard = fazi.before_mutate(true);
         if guard.is_none() {
             return;
         }
@@ -368,7 +334,7 @@ impl Mutable for i64 {
 impl Mutable for f32 {
     #[inline(always)]
     fn mutate<R: Rng>(&mut self, fazi: &mut Fazi<R>) {
-        let guard = Self::before_mutate(fazi);
+        let guard = fazi.before_mutate(true);
         if guard.is_none() {
             return;
         }
@@ -380,7 +346,7 @@ impl Mutable for f32 {
 impl Mutable for f64 {
     #[inline(always)]
     fn mutate<R: Rng>(&mut self, fazi: &mut Fazi<R>) {
-        let guard = Self::before_mutate(fazi);
+        let guard = fazi.before_mutate(true);
         if guard.is_none() {
             return;
         }
@@ -395,7 +361,7 @@ macro_rules! impl_mutate {
             impl Mutable for $name {
                 #[inline(always)]
                 fn mutate<R: Rng>(&mut self, fazi: &mut Fazi<R>) {
-                    let guard = Self::before_mutate(fazi);
+                    let guard = fazi.before_mutate(true);
                     if guard.is_none() {
                         return;
                     }
@@ -480,11 +446,6 @@ where
 {
     #[inline(always)]
     fn mutate<R: Rng>(&mut self, fazi: &mut Fazi<R>) {
-        let guard = Self::before_mutate(fazi);
-        if guard.is_none() {
-            return;
-        }
-
         match self.enum_value() {
             Ok(mut value) => {
                 value.mutate(fazi);
@@ -507,11 +468,6 @@ where
 {
     #[inline(always)]
     fn mutate<R: Rng>(&mut self, fazi: &mut Fazi<R>) {
-        let guard = Self::before_mutate(fazi);
-        if guard.is_none() {
-            return;
-        }
-
         self.0.mutate(fazi);
     }
 }
@@ -522,11 +478,6 @@ where
 {
     #[inline(always)]
     fn mutate<R: Rng>(&mut self, fazi: &mut Fazi<R>) {
-        let guard = Self::before_mutate(fazi);
-        if guard.is_none() {
-            return;
-        }
-
         self.as_mut().mutate(fazi);
     }
 }
