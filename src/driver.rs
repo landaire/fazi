@@ -28,8 +28,7 @@ use clap::StructOpt;
 use crate::options::Command;
 
 /// Global map of comparison operands from SanCov instrumentation
-pub(crate) static COMPARISON_OPERANDS: OnceCell<Mutex<ComparisonOperandMap>> =
-    OnceCell::new();
+pub(crate) static COMPARISON_OPERANDS: OnceCell<Mutex<ComparisonOperandMap>> = OnceCell::new();
 /// Set of PCs that the fuzzer has reached
 pub(crate) static COVERAGE: OnceCell<Mutex<HashSet<usize>>> = OnceCell::new();
 /// Set of PCs that the fuzzer has reached for this testcase
@@ -168,7 +167,11 @@ impl<R: Rng> Fazi<R> {
         }
 
         let can_request_more_data = !self.min_input_size.is_some();
-        let only_replay = self.options.replay_percentage.map(|p| p >= 1.0).unwrap_or(false);
+        let only_replay = self
+            .options
+            .replay_percentage
+            .map(|p| p >= 1.0)
+            .unwrap_or(false);
 
         if !only_replay && old_coverage != new_coverage {
             eprintln!(
@@ -214,13 +217,14 @@ impl<R: Rng> Fazi<R> {
 
             self.current_mutation_depth = 0;
             self.mutations.clear();
-        } else if only_replay || ((self.current_mutation_depth == self.options.max_mutation_depth
-            || self
-                .options
-                .replay_percentage
-                .map(|p| self.rng.gen_bool(p))
-                .unwrap_or(false))
-            && !(need_more_data && can_request_more_data))
+        } else if only_replay
+            || ((self.current_mutation_depth == self.options.max_mutation_depth
+                || self
+                    .options
+                    .replay_percentage
+                    .map(|p| self.rng.gen_bool(p))
+                    .unwrap_or(false))
+                && !(need_more_data && can_request_more_data))
         {
             let next_input = if self.rng.gen_bool(0.10) {
                 self.corpus.peek()

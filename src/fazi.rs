@@ -152,6 +152,7 @@ impl<R: Rng + SeedableRng> Fazi<R> {
         let input_paths: [&Path; 1] = [self.options.corpus_dir.as_ref()];
         for &path in &input_paths {
             if !path.exists() || !path.is_dir() {
+                panic!("???");
                 continue;
             }
 
@@ -173,13 +174,20 @@ impl<R: Rng + SeedableRng> Fazi<R> {
         }
 
         // Sort so that smaller testcases are preferred
-        self.restored_corpus.sort_by(|a, b| a.data.len().cmp(&b.data.len()));
-        self.recoverage_queue = self.restored_corpus.iter().map(|input| input.data.clone()).collect();
+        self.restored_corpus
+            .sort_by(|a, b| a.data.len().cmp(&b.data.len()));
+        self.recoverage_queue = self
+            .restored_corpus
+            .iter()
+            .map(|input| input.data.clone())
+            .collect();
     }
 
     /// Iterate over the inputs read from disk and replay them back.
     pub fn perform_recoverage(&mut self, callback: impl Fn(&[u8])) {
         while let Some(input) = self.recoverage_queue.pop() {
+            self.last_recoverage_input = Some(Arc::clone(&input));
+
             poison_input(&input);
 
             (callback)(input.as_slice());
@@ -188,6 +196,7 @@ impl<R: Rng + SeedableRng> Fazi<R> {
 
             self.recoverage_testcase_end();
         }
+        self.recoverage_testcase_end();
     }
 
     /// Iterate over the inputs read from disk and replay them back.
@@ -242,6 +251,7 @@ impl<R: Rng + SeedableRng> Fazi<R> {
             for input in &mut self.restored_corpus {
                 if input.data.as_ptr() == recoverage_input.as_ptr() {
                     let (_, _, input_coverage) = update_coverage();
+
                     input.coverage = input_coverage;
                     break;
                 }
@@ -249,7 +259,11 @@ impl<R: Rng + SeedableRng> Fazi<R> {
         }
 
         if self.recoverage_queue.is_empty() {
-            self.corpus.extend(self.restored_corpus.drain(..).filter(|item| item.coverage > 0));
+            self.corpus.extend(
+                self.restored_corpus
+                    .drain(..)
+                    .filter(|item| item.coverage > 0),
+            );
         }
     }
 }
