@@ -44,6 +44,9 @@ pub(crate) static FAZI_INITIALIZED: AtomicBool = AtomicBool::new(false);
 pub(crate) static U8_COUNTERS: OnceCell<Mutex<Vec<&'static [AtomicU8]>>> = OnceCell::new();
 /// PC info corresponding to the U8 counters.
 pub(crate) static PC_INFO: OnceCell<Mutex<Vec<&'static [PcEntry]>>> = OnceCell::new();
+/// Restricts coverage updates to specified threads.  Empty set will allow all threads.
+pub(crate) static COV_THREADS: OnceCell<Mutex<HashSet<u64>>> = OnceCell::new();
+pub(crate) static ENABLE_COUNTERS: AtomicBool = AtomicBool::new(true);
 /// The most recent input that was used for fuzzing.
 /// SAFETY: This value should only ever be read from the [`signal::death_callback()`],
 /// at which point we are about to exit and the fuzzer loop should not be running,
@@ -316,13 +319,18 @@ pub(crate) fn update_coverage() -> (usize, usize, usize) {
         .expect("PC_INFO not initialize")
         .lock()
         .expect("failed to lock PC_INFO");
-    for (module_idx, module_counters) in u8_counters.iter().enumerate() {
-        for (counter_idx, counter) in module_counters.iter().enumerate() {
-            if counter.load(Ordering::Relaxed) > 0 {
-                let pc_info = &module_pc_info[module_idx][counter_idx];
-                coverage.insert(pc_info.pc);
-                counter.store(0, Ordering::Relaxed);
-                input_coverage += 1;
+    // Skip the counters when updating coverage if limiting coverage to specific threads
+    // These in-lined counters have no callback, which makes it impossible to determine the thread that hit the counter.
+    // Can get same info (with small perf hit) by enabling -fsanitize-coverage=trace-pc-guard and/or -fsanitize-coverage=trace-pc
+    if ENABLE_COUNTERS.load(Ordering::Relaxed) {
+        for (module_idx, module_counters) in u8_counters.iter().enumerate() {
+            for (counter_idx, counter) in module_counters.iter().enumerate() {
+                if counter.load(Ordering::Relaxed) > 0 {
+                    let pc_info = &module_pc_info[module_idx][counter_idx];
+                    coverage.insert(pc_info.pc);
+                    counter.store(0, Ordering::Relaxed);
+                    input_coverage += 1;
+                }
             }
         }
     }

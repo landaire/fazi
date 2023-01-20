@@ -1,13 +1,18 @@
 use std::{
     ffi::CStr,
-    sync::{atomic::Ordering, Mutex, Arc}, path::Path,
+    path::Path,
+    sync::{atomic::Ordering, Arc, Mutex},
 };
 
 use clap::StructOpt;
 
 use crate::{
-    driver::{update_coverage, FAZI, FAZI_INITIALIZED, COMPARISON_OPERANDS, INPUTS_DIR, CRASHES_DIR, INPUTS_EXTENSION, save_input},
-    Fazi, options::RuntimeOptions,
+    driver::{
+        save_input, update_coverage, COMPARISON_OPERANDS, COV_THREADS, CRASHES_DIR,
+        ENABLE_COUNTERS, FAZI, FAZI_INITIALIZED, INPUTS_DIR, INPUTS_EXTENSION,
+    },
+    options::RuntimeOptions,
+    Fazi,
 };
 
 #[no_mangle]
@@ -154,7 +159,12 @@ pub extern "C" fn fazi_set_crashes_dir(dir: *const libc::c_char) {
 
 #[no_mangle]
 /// Adds binary data to the Fazi dictionary
-pub extern "C" fn fazi_dictionary_add(a: *const libc::c_char, alen: usize, b: *const libc::c_char, blen: usize) {
+pub extern "C" fn fazi_dictionary_add(
+    a: *const libc::c_char,
+    alen: usize,
+    b: *const libc::c_char,
+    blen: usize,
+) {
     let constants = COMPARISON_OPERANDS
         .get()
         .expect("constants global not initialized");
@@ -163,11 +173,15 @@ pub extern "C" fn fazi_dictionary_add(a: *const libc::c_char, alen: usize, b: *c
         match (a == std::ptr::null(), b == std::ptr::null()) {
             (true, false) => {
                 let dictionary_data = unsafe { std::slice::from_raw_parts(b as *const u8, blen) };
-                constants.binary.insert((Vec::with_capacity(0), dictionary_data.to_vec()));
+                constants
+                    .binary
+                    .insert((Vec::with_capacity(0), dictionary_data.to_vec()));
             }
             (false, true) => {
                 let dictionary_data = unsafe { std::slice::from_raw_parts(a as *const u8, alen) };
-                constants.binary.insert((Vec::with_capacity(0), dictionary_data.to_vec()));
+                constants
+                    .binary
+                    .insert((Vec::with_capacity(0), dictionary_data.to_vec()));
             }
             (false, false) => {
                 let a_dict = unsafe { std::slice::from_raw_parts(a as *const u8, alen) };
@@ -234,8 +248,7 @@ pub extern "C" fn fazi_add_corpus_entry(data: *const u8, len: usize) {
 
     let data = unsafe { std::slice::from_raw_parts(data, len) };
     let data: Arc<Vec<u8>> = Arc::new(data.into());
-    let corpus_dir: &Path =
-        unsafe { INPUTS_DIR.as_ref().expect("INPUTS_DIR not initialized") };
+    let corpus_dir: &Path = unsafe { INPUTS_DIR.as_ref().expect("INPUTS_DIR not initialized") };
     let extension: Option<&String> = unsafe { INPUTS_EXTENSION.as_ref() };
     let extension = extension.map(|e| e.as_ref());
     save_input(corpus_dir, extension, data.as_ref());
@@ -255,3 +268,37 @@ pub extern "C" fn fazi_set_max_input_len(len: usize) {
     fazi.options.max_input_len = len;
 }
 
+#[no_mangle]
+/// Add thread to set of threads allowed to contribute to coverage
+pub extern "C" fn fazi_add_coverage_thread(thread_id: u64) {
+    COV_THREADS
+        .get()
+        .expect("Failed to get COV_THREADS")
+        .lock()
+        .expect("Failed to lock COV_THREADS")
+        .insert(thread_id);
+}
+
+#[no_mangle]
+/// Clear set of threads coverage limited to.  Will allow all threads to contribute to coverage
+pub extern "C" fn fazi_clear_coverage_threads() {
+    COV_THREADS
+        .get()
+        .expect("Failed to get COV_THREADS")
+        .lock()
+        .expect("Failed to lock COV_THREADS")
+        .clear();
+}
+
+#[no_mangle]
+/// Disable inlined counters adding to coverage
+/// Have no way of knowing which thread called these as there is no callback, the counter is inlined to the function.
+pub extern "C" fn fazi_disable_cov_counters() {
+    ENABLE_COUNTERS.store(false, Ordering::Relaxed);
+}
+
+#[no_mangle]
+/// Re-enable inlined counters counting towards fazi coverage if previously disabled
+pub extern "C" fn fazi_enable_cov_counters() {
+    ENABLE_COUNTERS.store(true, Ordering::Relaxed);
+}
