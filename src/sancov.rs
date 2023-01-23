@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    driver::{COMPARISON_OPERANDS, PC_INFO, TESTCASE_COVERAGE, U8_COUNTERS},
+    driver::{COMPARISON_OPERANDS, COV_THREADS, PC_INFO, TESTCASE_COVERAGE, U8_COUNTERS},
     exports::fazi_initialize,
 };
 
@@ -138,9 +138,36 @@ impl ComparisonOperandMap {
     }
 }
 
+//#[inline]
+fn should_record_coverage() -> bool {
+    // Empty set will allow all threads
+    if COV_THREADS
+        .get()
+        .expect("Failed to get COV_THREADS")
+        .lock()
+        .expect("Failed to lock COV_THREADS")
+        .is_empty()
+    {
+        return true;
+    }
+    if !COV_THREADS
+        .get()
+        .expect("Failed to get COV_THREADS")
+        .lock()
+        .expect("Failed to lock COV_THREADS")
+        .contains(&gettid::gettid())
+    {
+        return false;
+    }
+    true
+}
+
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_pc_guard(_guard: *const u32) {
     fazi_initialize();
+    if !should_record_coverage() {
+        return;
+    }
     let caller_pc = caller_address!();
     TESTCASE_COVERAGE
         .get()
@@ -154,6 +181,9 @@ extern "C" fn __sanitizer_cov_trace_pc_guard(_guard: *const u32) {
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_pc() {
+    if !should_record_coverage() {
+        return;
+    }
     let caller_pc = caller_address!();
     TESTCASE_COVERAGE
         .get()
@@ -220,6 +250,9 @@ extern "C" fn __sanitizer_cov_pcs_init(
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_pc_indir(callee: *const std::ffi::c_void) {
     use std::collections::hash_map::DefaultHasher;
+    if !should_record_coverage() {
+        return;
+    }
 
     let caller_pc = caller_address!();
     let mut coverage = TESTCASE_COVERAGE
@@ -301,6 +334,9 @@ macro_rules! handle_cmp {
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_cmp8(arg1: u64, arg2: u64) {
+    if !should_record_coverage() {
+        return;
+    }
     handle_cmp!(CmpOperand::Dynamic(arg1), CmpOperand::Dynamic(arg2), u64);
 
     let caller_pc = caller_address!();
@@ -320,6 +356,9 @@ extern "C" fn __sanitizer_cov_trace_cmp8(arg1: u64, arg2: u64) {
 // should be changed later to make full use of instrumentation.
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_const_cmp8(arg1: u64, arg2: u64) {
+    if !should_record_coverage() {
+        return;
+    }
     handle_cmp!(CmpOperand::Constant(arg1), CmpOperand::Dynamic(arg2), u64);
 
     let caller_pc = caller_address!();
@@ -337,6 +376,9 @@ extern "C" fn __sanitizer_cov_trace_const_cmp8(arg1: u64, arg2: u64) {
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_cmp4(arg1: u32, arg2: u32) {
+    if !should_record_coverage() {
+        return;
+    }
     handle_cmp!(CmpOperand::Dynamic(arg1), CmpOperand::Dynamic(arg2), u32);
 
     let caller_pc = caller_address!();
@@ -354,6 +396,9 @@ extern "C" fn __sanitizer_cov_trace_cmp4(arg1: u32, arg2: u32) {
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_const_cmp4(arg1: u32, arg2: u32) {
+    if !should_record_coverage() {
+        return;
+    }
     handle_cmp!(CmpOperand::Constant(arg1), CmpOperand::Dynamic(arg2), u32);
 
     let caller_pc = caller_address!();
@@ -370,6 +415,9 @@ extern "C" fn __sanitizer_cov_trace_const_cmp4(arg1: u32, arg2: u32) {
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_cmp2(arg1: u16, arg2: u16) {
+    if !should_record_coverage() {
+        return;
+    }
     handle_cmp!(CmpOperand::Dynamic(arg1), CmpOperand::Dynamic(arg2), u16);
 
     let caller_pc = caller_address!();
@@ -386,6 +434,9 @@ extern "C" fn __sanitizer_cov_trace_cmp2(arg1: u16, arg2: u16) {
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_const_cmp2(arg1: u16, arg2: u16) {
+    if !should_record_coverage() {
+        return;
+    }
     handle_cmp!(CmpOperand::Constant(arg1), CmpOperand::Dynamic(arg2), u16);
 
     let caller_pc = caller_address!();
@@ -402,6 +453,9 @@ extern "C" fn __sanitizer_cov_trace_const_cmp2(arg1: u16, arg2: u16) {
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_cmp1(arg1: u8, arg2: u8) {
+    if !should_record_coverage() {
+        return;
+    }
     handle_cmp!(CmpOperand::Dynamic(arg1), CmpOperand::Dynamic(arg2), u8);
 
     let caller_pc = caller_address!();
@@ -418,6 +472,9 @@ extern "C" fn __sanitizer_cov_trace_cmp1(arg1: u8, arg2: u8) {
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_const_cmp1(arg1: u8, arg2: u8) {
+    if !should_record_coverage() {
+        return;
+    }
     handle_cmp!(CmpOperand::Constant(arg1), CmpOperand::Dynamic(arg2), u8);
 
     let caller_pc = caller_address!();
@@ -479,6 +536,9 @@ extern "C" fn __sanitizer_cov_trace_switch(_val: u64, _cases: *const u64) {
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_div4(_val: u32) {
+    if !should_record_coverage() {
+        return;
+    }
     let caller_pc = caller_address!();
     TESTCASE_COVERAGE
         .get()
@@ -492,6 +552,9 @@ extern "C" fn __sanitizer_cov_trace_div4(_val: u32) {
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_div8(_val: u64) {
+    if !should_record_coverage() {
+        return;
+    }
     let caller_pc = caller_address!();
     TESTCASE_COVERAGE
         .get()
@@ -505,6 +568,9 @@ extern "C" fn __sanitizer_cov_trace_div8(_val: u64) {
 
 #[no_mangle]
 extern "C" fn __sanitizer_cov_trace_gep(_idx: *const std::ffi::c_void) {
+    if !should_record_coverage() {
+        return;
+    }
     let caller_pc = caller_address!();
     TESTCASE_COVERAGE
         .get()

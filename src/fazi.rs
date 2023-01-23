@@ -12,8 +12,8 @@ use crate::{
 };
 
 use crate::driver::{
-    poison_input, unpoison_input, update_coverage, COMPARISON_OPERANDS, COVERAGE, FAZI_INITIALIZED,
-    PC_INFO, U8_COUNTERS,
+    poison_input, unpoison_input, update_coverage, COMPARISON_OPERANDS, COVERAGE, COV_THREADS,
+    FAZI_INITIALIZED, PC_INFO, U8_COUNTERS,
 };
 use crate::mutations::MutationStrategy;
 
@@ -241,6 +241,9 @@ impl<R: Rng + SeedableRng> Fazi<R> {
         PC_INFO
             .set(Default::default())
             .expect("PC_INFO already initialized");
+        COV_THREADS
+            .set(Default::default())
+            .expect("COV_THREADS already initialized");
 
         FAZI_INITIALIZED.store(true, Ordering::Relaxed);
     }
