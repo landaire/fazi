@@ -12,6 +12,7 @@ use crate::{
         ENABLE_COUNTERS, FAZI, FAZI_INITIALIZED, INPUTS_DIR, INPUTS_EXTENSION,
     },
     options::RuntimeOptions,
+    sancov::reset_pc_guards,
     Fazi,
 };
 
@@ -301,4 +302,11 @@ pub extern "C" fn fazi_disable_cov_counters() {
 /// Re-enable inlined counters counting towards fazi coverage if previously disabled
 pub extern "C" fn fazi_enable_cov_counters() {
     ENABLE_COUNTERS.store(true, Ordering::Relaxed);
+}
+
+#[no_mangle]
+/// Reset guard variables sent in user defined callback that measures code coverage
+pub extern "C" fn fazi_reset_coverage() {
+    reset_pc_guards();
+    // TODO reset other coverage items
 }

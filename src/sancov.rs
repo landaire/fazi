@@ -1,13 +1,17 @@
 use std::{
     collections::{BTreeSet, HashSet},
     hash::Hasher,
-    sync::atomic::AtomicU8,
+    sync::atomic::{AtomicU32, AtomicU8, Ordering},
 };
 
 use crate::{
     driver::{COMPARISON_OPERANDS, COV_THREADS, PC_INFO, TESTCASE_COVERAGE, U8_COUNTERS},
     exports::fazi_initialize,
 };
+
+pub(crate) static GUARD_N: AtomicU32 = AtomicU32::new(0);
+pub(crate) static GUARD_START: AtomicU32 = AtomicU32::new(0);
+pub(crate) static GUARD_STOP: AtomicU32 = AtomicU32::new(0);
 
 #[derive(Debug)]
 #[repr(C)]
@@ -138,7 +142,7 @@ impl ComparisonOperandMap {
     }
 }
 
-//#[inline]
+#[inline]
 fn should_record_coverage() -> bool {
     // Empty set will allow all threads
     if COV_THREADS
@@ -163,8 +167,19 @@ fn should_record_coverage() -> bool {
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_cov_trace_pc_guard(_guard: *const u32) {
-    fazi_initialize();
+extern "C" fn __sanitizer_cov_trace_pc_guard(guard: *mut u32) {
+    // This callback is executed everywhere in code instrumented with `-fsanitize-coverage=trace-pc-guard`
+    // Do quick checks first for optimization
+    unsafe {
+        // Likely for optimization that guard has been accounted for already
+        if std::intrinsics::likely(*guard == 0) {
+            return; // Duplicate the guard check.
+        }
+
+        // short circuit future executions of this callback to not slow down app
+        *guard = 0;
+    }
+
     if !should_record_coverage() {
         return;
     }
@@ -214,6 +229,50 @@ extern "C" fn __sanitizer_cov_8bit_counters_init(start: *mut u8, stop: *mut u8) 
         }
     }
     u8_counters.push(counters);
+}
+
+pub fn reset_pc_guards() {
+    let guard_info = unsafe {
+        std::slice::from_raw_parts_mut(
+            GUARD_START.load(Ordering::Relaxed) as *mut u32,
+            (GUARD_STOP.load(Ordering::Relaxed) as *mut u32)
+                .offset_from(GUARD_START.load(Ordering::Relaxed) as *mut u32) as usize,
+        )
+    };
+    let mut guard_n: u32 = 0;
+    // Give each guard variable a unique (non zero) initial value
+    // start/stop are pointers to this data in the __sancov_guards section
+    unsafe {
+        for x in guard_info.iter_mut() {
+            guard_n += 1;
+            *x = guard_n;
+        }
+    }
+}
+
+#[no_mangle]
+extern "C" fn __sanitizer_cov_trace_pc_guard_init(start: *const u32, stop: *const u32) {
+    fazi_initialize();
+    let mut guard_n: u32 = 0;
+
+    let guard_info = unsafe {
+        std::slice::from_raw_parts_mut(
+            start as *mut u32,
+            (stop as *mut u32).offset_from(start as *mut u32) as usize,
+        )
+    };
+
+    // Give each guard variable a unique (non zero) initial value
+    // start/stop are pointers to this data in the __sancov_guards section
+    unsafe {
+        for x in guard_info.iter_mut() {
+            guard_n += 1;
+            *x = guard_n;
+        }
+    }
+    GUARD_N.store(guard_n, Ordering::Relaxed);
+    GUARD_START.store(start as u32, Ordering::Relaxed);
+    GUARD_STOP.store(stop as u32, Ordering::Relaxed);
 }
 
 #[no_mangle]
