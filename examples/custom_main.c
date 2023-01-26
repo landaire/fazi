@@ -33,6 +33,8 @@ void fazi_set_corpus_dir(const char *);
 void fazi_set_crashes_dir(const char *);
 void fazi_disable_cov_counters();
 void fazi_reset_coverage();
+void fazi_next_recoverage_testcase(char** data, size_t* size);
+void fazi_restore_inputs();
 
 char answer[] = {0xde, 0xad, 0xbe, 0xef};
 
@@ -51,21 +53,37 @@ int test_func(const char *data, size_t len) {
 
 // Function is used here to help measure fuzzing iterations/s
 int test_func_for_perf_measurement(const char *data, size_t len) {
-    uint32_t val = (uint32_t)data;
+    uint8_t val = (uint8_t)data[0];
 
     no_op_state += val;
     if (no_op_state == 123456789) {
         printf("wow lucky\n");
     }
+    switch (val) {
+        case 1:
+            no_op_state += 4;
+            break;
+        case 2:
+            no_op_state += 2;
+            break;
+        case 3:
+            no_op_state += 8;
+            break;
+        case 4:
+            no_op_state += 99;
+            break;
+    }
     return 0;
 }
 
+__attribute__((no_sanitize("coverage")))
 int main() {
     clock_t start, end;
     double execution_time;
     // Setup fazi globals
     fazi_initialize();
     fazi_init_signal_handler();
+    fazi_restore_inputs();
     fazi_enable_rust_backtrace();
     fazi_set_corpus_dir("corpus");
     fazi_set_crashes_dir("crashes");
@@ -74,15 +92,30 @@ int main() {
     fazi_add_coverage_thread(gettid());
     fazi_disable_cov_counters();
     fazi_reset_coverage();
-    int iterations = 0;
 
+    int iterations = 0;
+    bool do_recoverage = true;
+    char* data = 0;
+    size_t len = 0;
     start = clock();
     while (true) {
-        char* data = 0;
-        size_t len = 0;
-        fazi_start_iteration(&data, &len);
+        if(do_recoverage) {
+            fazi_next_recoverage_testcase(&data, &len);
+            if (NULL == data) {
+                printf("Done with recoverage\n");
+                do_recoverage = false;
+                continue;
+            }
+            printf("Recoverage iteration %d\n", iterations);
+        }
+        else {
+            fazi_start_iteration(&data, &len);
+        }
+
         if(len < sizeof(answer)) {
-            fazi_end_iteration(true);
+            if(!do_recoverage) {
+                fazi_end_iteration(true);
+            }
             continue;
         }
         iterations++;
@@ -95,8 +128,9 @@ int main() {
         }
 
         test_func_for_perf_measurement(data, len);
-
-        fazi_end_iteration(false);
+        if(!do_recoverage) {
+            fazi_end_iteration(false);
+        }
     }
     return 0;
 }
