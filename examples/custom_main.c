@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <assert.h>
+#include <time.h>
 #define _GNU_SOURCE
 #include <unistd.h>
 
@@ -31,21 +32,37 @@ void fazi_set_max_input_len(int);
 void fazi_set_corpus_dir(const char *);
 void fazi_set_crashes_dir(const char *);
 void fazi_disable_cov_counters();
+void fazi_reset_coverage();
 
 char answer[] = {0xde, 0xad, 0xbe, 0xef};
+
+int no_op_state = 0;
 
 int test_func(const char *data, size_t len) {
     if (memcmp(answer, data, sizeof(answer)) == 0) {
         printf("data matched!\n");
         // artificially crash program
-        char *p = 0;
+        char *p = 0x13371337;
         *p = 0xff;
         return 1;
     }
     return 0;
 }
 
+// Function is used here to help measure fuzzing iterations/s
+int test_func_for_perf_measurement(const char *data, size_t len) {
+    uint32_t val = (uint32_t)data;
+
+    no_op_state += val;
+    if (no_op_state == 123456789) {
+        printf("wow lucky\n");
+    }
+    return 0;
+}
+
 int main() {
+    clock_t start, end;
+    double execution_time;
     // Setup fazi globals
     fazi_initialize();
     fazi_init_signal_handler();
@@ -56,6 +73,10 @@ int main() {
     // allow the main thread to record coverage
     fazi_add_coverage_thread(gettid());
     fazi_disable_cov_counters();
+    fazi_reset_coverage();
+    int iterations = 0;
+
+    start = clock();
     while (true) {
         char* data = 0;
         size_t len = 0;
@@ -64,8 +85,16 @@ int main() {
             fazi_end_iteration(true);
             continue;
         }
+        iterations++;
+        if (iterations == 100000) {
+            end = clock();
+            execution_time = ((double)(end - start))/CLOCKS_PER_SEC;
+            printf("100000 iterations in : %fs\n", execution_time);
+            start = clock();
+            iterations = 0;
+        }
 
-        test_func(data, len);
+        test_func_for_perf_measurement(data, len);
 
         fazi_end_iteration(false);
     }

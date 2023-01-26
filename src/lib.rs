@@ -1,5 +1,6 @@
 #![feature(linkage)]
 #![feature(link_llvm_intrinsics)]
+#![feature(core_intrinsics)]
 #![doc = include_str!("../README.md")]
 
 /// Interesting values that can be used during mutations
