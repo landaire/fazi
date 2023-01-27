@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeSet, HashSet},
     hash::Hasher,
-    sync::atomic::{AtomicU32, AtomicU8, Ordering},
+    sync::atomic::{AtomicU64, AtomicU8, Ordering},
 };
 
 use crate::{
@@ -9,9 +9,11 @@ use crate::{
     exports::fazi_initialize,
 };
 
-pub(crate) static GUARD_N: AtomicU32 = AtomicU32::new(0);
-pub(crate) static GUARD_START: AtomicU32 = AtomicU32::new(0);
-pub(crate) static GUARD_STOP: AtomicU32 = AtomicU32::new(0);
+pub(crate) static GUARD_N: AtomicU64 = AtomicU64::new(0);
+// GUARD_START and GUARD_STOP are platform sized pointers, despite llvm docs saying they are *uint32_t
+// store in U64 and convert back to *mut usize
+pub(crate) static GUARD_START: AtomicU64 = AtomicU64::new(0);
+pub(crate) static GUARD_STOP: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug)]
 #[repr(C)]
@@ -167,7 +169,7 @@ fn should_record_coverage() -> bool {
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_cov_trace_pc_guard(guard: *mut u32) {
+extern "C" fn __sanitizer_cov_trace_pc_guard(guard: *mut usize) {
     // This callback is executed everywhere in code instrumented with `-fsanitize-coverage=trace-pc-guard`
     // Do quick checks first for optimization
     unsafe {
@@ -234,45 +236,40 @@ extern "C" fn __sanitizer_cov_8bit_counters_init(start: *mut u8, stop: *mut u8) 
 pub fn reset_pc_guards() {
     let guard_info = unsafe {
         std::slice::from_raw_parts_mut(
-            GUARD_START.load(Ordering::Relaxed) as *mut u32,
-            (GUARD_STOP.load(Ordering::Relaxed) as *mut u32)
-                .offset_from(GUARD_START.load(Ordering::Relaxed) as *mut u32) as usize,
+            GUARD_START.load(Ordering::Relaxed) as *mut usize,
+            GUARD_N.load(Ordering::Relaxed) as usize,
         )
     };
-    let mut guard_n: u32 = 0;
+    let mut guard_n: usize = 0;
     // Give each guard variable a unique (non zero) initial value
     // start/stop are pointers to this data in the __sancov_guards section
-    unsafe {
-        for x in guard_info.iter_mut() {
-            guard_n += 1;
-            *x = guard_n;
-        }
+    for x in guard_info.iter_mut() {
+        guard_n += 1;
+        *x = guard_n;
     }
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_cov_trace_pc_guard_init(start: *const u32, stop: *const u32) {
-    fazi_initialize();
-    let mut guard_n: u32 = 0;
+extern "C" fn __sanitizer_cov_trace_pc_guard_init(start: *mut usize, stop: *mut usize) {
+    let mut guard_n: usize = 0;
+    unsafe {
+        if start == stop || *start != 0 {
+            return; // Initialize only once.
+        }
+    }
 
-    let guard_info = unsafe {
-        std::slice::from_raw_parts_mut(
-            start as *mut u32,
-            (stop as *mut u32).offset_from(start as *mut u32) as usize,
-        )
-    };
+    let guard_info =
+        unsafe { std::slice::from_raw_parts_mut(start, (stop).offset_from(start) as usize) };
 
     // Give each guard variable a unique (non zero) initial value
     // start/stop are pointers to this data in the __sancov_guards section
-    unsafe {
-        for x in guard_info.iter_mut() {
-            guard_n += 1;
-            *x = guard_n;
-        }
+    for x in guard_info.iter_mut() {
+        guard_n += 1;
+        *x = guard_n;
     }
-    GUARD_N.store(guard_n, Ordering::Relaxed);
-    GUARD_START.store(start as u32, Ordering::Relaxed);
-    GUARD_STOP.store(stop as u32, Ordering::Relaxed);
+    GUARD_N.store(guard_n as u64, Ordering::Relaxed);
+    GUARD_START.store(start as u64, Ordering::Relaxed);
+    GUARD_STOP.store(stop as u64, Ordering::Relaxed);
 }
 
 #[no_mangle]

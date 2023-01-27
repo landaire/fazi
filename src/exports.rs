@@ -306,7 +306,13 @@ pub extern "C" fn fazi_enable_cov_counters() {
 
 #[no_mangle]
 /// Reset guard variables sent in user defined callback that measures code coverage
+/// Reset fazi internal coverage as well
 pub extern "C" fn fazi_reset_coverage() {
     reset_pc_guards();
-    // TODO reset other coverage items
+    let mut fazi = FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
+    fazi.clear_coverage();
 }

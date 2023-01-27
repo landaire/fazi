@@ -294,6 +294,37 @@ impl<R: Rng> Fazi<R> {
     }
 }
 
+pub(crate) fn clear_coverage() {
+    COVERAGE
+        .get()
+        .expect("failed to get COVERAGE")
+        .lock()
+        .expect("failed to lock COVERAGE")
+        .clear();
+
+    TESTCASE_COVERAGE
+        .get()
+        .expect("failed to get TESTCASE_COVERAGE")
+        .lock()
+        .expect("failed to lock TESTCASE_COVERAGE")
+        .clear();
+    let u8_counters = U8_COUNTERS
+        .get()
+        .expect("U8_COUNTERS not initialized")
+        .lock()
+        .expect("failed to lock U8_COUNTERS");
+    let module_pc_info = PC_INFO
+        .get()
+        .expect("PC_INFO not initialize")
+        .lock()
+        .expect("failed to lock PC_INFO");
+    for module_counters in u8_counters.iter() {
+        for counter in module_counters.iter() {
+            counter.store(0, Ordering::Relaxed);
+        }
+    }
+}
+
 pub(crate) fn update_coverage() -> (usize, usize, usize) {
     let mut coverage = COVERAGE
         .get()

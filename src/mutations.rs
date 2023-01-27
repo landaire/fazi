@@ -447,10 +447,10 @@ impl<R: Rng> Fazi<R> {
             IntegerWidth::Binary
         } else {
             choices
-            .as_slice()
-            .choose(&mut self.rng)
-            .expect("empty choices?")
-            .clone()
+                .as_slice()
+                .choose(&mut self.rng)
+                .expect("empty choices?")
+                .clone()
         };
 
         let mut constants = COMPARISON_OPERANDS
@@ -596,7 +596,8 @@ impl<R: Rng> Fazi<R> {
                         .iter()
                         .choose(&mut self.rng)
                         .expect("binary dictionary is empty?");
-                    let (left_side_len, right_side_len) = (binary_compare_target.0.len(), binary_compare_target.1.len());
+                    let (left_side_len, right_side_len) =
+                        (binary_compare_target.0.len(), binary_compare_target.1.len());
 
                     // If one of the lengths was 0 bytes, we need to just overwrite/insert these bytes randomly
                     let random_position_bytes = if left_side_len == 0 {
@@ -609,7 +610,8 @@ impl<R: Rng> Fazi<R> {
 
                     if let Some(random_position_bytes) = random_position_bytes {
                         // If we can't overwrite the data, we always insert
-                        let should_insert = self.input.len() < random_position_bytes.len() || self.rng.gen();
+                        let should_insert =
+                            self.input.len() < random_position_bytes.len() || self.rng.gen();
                         let upper_bound = if should_insert {
                             self.input.len()
                         } else {
@@ -631,24 +633,28 @@ impl<R: Rng> Fazi<R> {
                     }
 
                     let (bytes_in_input, bytes_it_should_be) = if self.rng.gen_bool(0.90) {
-                        (binary_compare_target.0.as_slice(), binary_compare_target.1.as_slice())
+                        (
+                            binary_compare_target.0.as_slice(),
+                            binary_compare_target.1.as_slice(),
+                        )
                     } else {
-                        (binary_compare_target.1.as_slice(), binary_compare_target.0.as_slice())
+                        (
+                            binary_compare_target.1.as_slice(),
+                            binary_compare_target.0.as_slice(),
+                        )
                     };
 
                     // Try to find a byte slice that matches one of these arguments
                     let mut found_match = None;
-                    for (idx, window) in self
-                        .input
-                        .windows(bytes_in_input.len())
-                        .enumerate()
-                    {
+                    for (idx, window) in self.input.windows(bytes_in_input.len()).enumerate() {
                         if window == bytes_in_input {
                             found_match = Some((idx, bytes_in_input, bytes_it_should_be));
                             break;
                         }
 
-                        if bytes_in_input.len() == bytes_it_should_be.len() && window == bytes_it_should_be {
+                        if bytes_in_input.len() == bytes_it_should_be.len()
+                            && window == bytes_it_should_be
+                        {
                             found_match = Some((idx, bytes_it_should_be, bytes_in_input));
                             break;
                         }
@@ -669,7 +675,8 @@ impl<R: Rng> Fazi<R> {
                         let old_data = &mut input[idx..idx + bytes_in_input.len()];
                         if old_data.len() < new_bytes.len() {
                             // Overwrite as much data as we can
-                            let (overwritten_data, data_to_insert) = new_bytes.split_at(bytes_in_input.len());
+                            let (overwritten_data, data_to_insert) =
+                                new_bytes.split_at(bytes_in_input.len());
                             old_data.copy_from_slice(overwritten_data);
                             for &b in data_to_insert.iter().rev() {
                                 input.insert(idx + overwritten_data.len(), b);

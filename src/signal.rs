@@ -9,7 +9,7 @@ use rand::Rng;
 use signal_hook::iterator::Signals;
 
 use crate::{
-    driver::{handle_crash, save_input, CRASHES_DIR, INPUTS_DIR, LAST_INPUT, INPUTS_EXTENSION},
+    driver::{handle_crash, save_input, CRASHES_DIR, INPUTS_DIR, INPUTS_EXTENSION, LAST_INPUT},
     weak_imports::sanitizer_set_death_callback_fn,
     Fazi,
 };
