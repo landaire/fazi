@@ -236,11 +236,11 @@ extern "C" fn __sanitizer_cov_8bit_counters_init(start: *mut u8, stop: *mut u8) 
 pub fn reset_pc_guards() {
     let guard_info = unsafe {
         std::slice::from_raw_parts_mut(
-            GUARD_START.load(Ordering::Relaxed) as *mut usize,
+            GUARD_START.load(Ordering::Relaxed) as *mut u32,
             GUARD_N.load(Ordering::Relaxed) as usize,
         )
     };
-    let mut guard_n: usize = 0;
+    let mut guard_n = 0;
     // Give each guard variable a unique (non zero) initial value
     // start/stop are pointers to this data in the __sancov_guards section
     for x in guard_info.iter_mut() {
@@ -250,14 +250,14 @@ pub fn reset_pc_guards() {
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_cov_trace_pc_guard_init(start: *mut usize, stop: *mut usize) {
-    let mut guard_n: usize = 0;
+extern "C" fn __sanitizer_cov_trace_pc_guard_init(start: *mut u32, stop: *mut u32) {
+    let mut guard_n = 0;
     unsafe {
         if start == stop || *start != 0 {
             return; // Initialize only once.
         }
     }
-
+    // The guards are [start, stop), note the stop address is exclusive
     let guard_info =
         unsafe { std::slice::from_raw_parts_mut(start, (stop).offset_from(start) as usize) };
 
