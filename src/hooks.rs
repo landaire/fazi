@@ -9,6 +9,16 @@ use once_cell::sync::OnceCell;
 type MemCmpFn = unsafe extern "C" fn(*const libc::c_char, *const libc::c_char, usize) -> c_int;
 static MEMCMP_ADDRESS: OnceCell<MemCmpFn> = OnceCell::new();
 
+// libc for android doesn't define this for android yet
+// bionic defines this here https://github.com/aosp-mirror/platform_bionic/blob/master/libc/include/dlfcn.h
+#[cfg(all(target_os = "android", target_pointer_width = "64"))]
+const RTLD_NEXT: *mut c_void = -1i64 as *mut c_void;
+#[cfg(all(target_os = "android", not(target_pointer_width = "64")))]
+const RTLD_NEXT: *mut c_void = 0xfffffffe as *mut c_void;
+
+#[cfg(not(target_os = "android"))]
+use libc::RTLD_NEXT;
+
 #[no_mangle]
 #[cfg(feature = "hook_memcmp")]
 extern "C" fn memcmp(s1: *const libc::c_char, s2: *const libc::c_char, count: usize) -> c_int {
@@ -20,7 +30,7 @@ extern "C" fn memcmp(s1: *const libc::c_char, s2: *const libc::c_char, count: us
             // It's fine if this has been done.
             let symbol_name = CString::new("memcmp").unwrap();
             let fn_address =
-                unsafe { libc::dlsym(libc::RTLD_NEXT, symbol_name.as_ptr()) as *const c_void };
+                unsafe { libc::dlsym(RTLD_NEXT, symbol_name.as_ptr()) as *const c_void };
             let real_memcmp = unsafe { std::mem::transmute::<_, MemCmpFn>(fn_address) };
             let _ = MEMCMP_ADDRESS.set(real_memcmp);
             real_memcmp
@@ -44,7 +54,7 @@ extern "C" fn bcmp(s1: *const libc::c_char, s2: *const libc::c_char, count: usiz
             // It's fine if this has been done.
             let symbol_name = CString::new("memcmp").unwrap();
             let fn_address =
-                unsafe { libc::dlsym(libc::RTLD_NEXT, symbol_name.as_ptr()) as *const c_void };
+                unsafe { libc::dlsym(RTLD_NEXT, symbol_name.as_ptr()) as *const c_void };
             let real_memcmp = unsafe { std::mem::transmute::<_, MemCmpFn>(fn_address) };
             let _ = MEMCMP_ADDRESS.set(real_memcmp);
             real_memcmp
