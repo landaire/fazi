@@ -43,3 +43,6 @@ hook_builtins = ["hook_memcmp", "hook_bcmp", "hook_strncmp", "hook_strncasecmp",
 
 [[example]]
 name = "simple_harness"
+
+[profile.release]
+panic = 'abort'
