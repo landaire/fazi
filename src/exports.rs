@@ -272,13 +272,24 @@ pub extern "C" fn fazi_set_max_input_len(len: usize) {
 
 #[no_mangle]
 /// Add thread to set of threads allowed to contribute to coverage
-pub extern "C" fn fazi_add_coverage_thread(thread_id: u64) {
+pub extern "C" fn fazi_add_coverage_thread(thread_id: usize) {
     COV_THREADS
         .get()
         .expect("Failed to get COV_THREADS")
-        .lock()
+        .write()
         .expect("Failed to lock COV_THREADS")
         .insert(thread_id);
+}
+
+#[no_mangle]
+/// Add thread to set of threads allowed to contribute to coverage
+pub extern "C" fn fazi_add_coverage_current_thread() {
+    COV_THREADS
+        .get()
+        .expect("Failed to get COV_THREADS")
+        .write()
+        .expect("Failed to lock COV_THREADS")
+        .insert(thread_id::get());
 }
 
 #[no_mangle]
@@ -287,7 +298,7 @@ pub extern "C" fn fazi_clear_coverage_threads() {
     COV_THREADS
         .get()
         .expect("Failed to get COV_THREADS")
-        .lock()
+        .write()
         .expect("Failed to lock COV_THREADS")
         .clear();
 }

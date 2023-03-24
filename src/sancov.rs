@@ -146,26 +146,14 @@ impl ComparisonOperandMap {
 
 #[inline]
 fn should_record_coverage() -> bool {
+    let cov_threads = COV_THREADS
+        .get()
+        .expect("Failed to get COV_THREADS")
+        .read()
+        .expect("Failed to lock COV_THREADS");
+
     // Empty set will allow all threads
-    if COV_THREADS
-        .get()
-        .expect("Failed to get COV_THREADS")
-        .lock()
-        .expect("Failed to lock COV_THREADS")
-        .is_empty()
-    {
-        return true;
-    }
-    if !COV_THREADS
-        .get()
-        .expect("Failed to get COV_THREADS")
-        .lock()
-        .expect("Failed to lock COV_THREADS")
-        .contains(&gettid::gettid())
-    {
-        return false;
-    }
-    true
+    cov_threads.is_empty() || cov_threads.contains(&thread_id::get())
 }
 
 #[no_mangle]

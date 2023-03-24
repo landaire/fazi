@@ -19,7 +19,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, AtomicU8, Ordering},
-        Arc, Mutex,
+        Arc, Mutex, RwLock,
     },
 };
 
@@ -45,7 +45,7 @@ pub(crate) static U8_COUNTERS: OnceCell<Mutex<Vec<&'static [AtomicU8]>>> = OnceC
 /// PC info corresponding to the U8 counters.
 pub(crate) static PC_INFO: OnceCell<Mutex<Vec<&'static [PcEntry]>>> = OnceCell::new();
 /// Restricts coverage updates to specified threads.  Empty set will allow all threads.
-pub(crate) static COV_THREADS: OnceCell<Mutex<HashSet<u64>>> = OnceCell::new();
+pub(crate) static COV_THREADS: OnceCell<RwLock<HashSet<usize>>> = OnceCell::new();
 pub(crate) static ENABLE_COUNTERS: AtomicBool = AtomicBool::new(true);
 /// The most recent input that was used for fuzzing.
 /// SAFETY: This value should only ever be read from the [`signal::death_callback()`],
