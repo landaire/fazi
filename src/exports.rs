@@ -140,6 +140,8 @@ pub extern "C" fn fazi_set_corpus_dir(dir: *const libc::c_char) {
     let dir = unsafe { CStr::from_ptr(dir) };
 
     fazi.options.corpus_dir = dir.to_string_lossy().into_owned().into();
+    std::fs::create_dir_all(&fazi.options.corpus_dir).expect("failed to make corpus dir");
+
     unsafe { INPUTS_DIR = Some(fazi.options.corpus_dir.clone()) };
 }
 
@@ -155,6 +157,8 @@ pub extern "C" fn fazi_set_crashes_dir(dir: *const libc::c_char) {
     let dir = unsafe { CStr::from_ptr(dir) };
 
     fazi.options.crashes_dir = dir.to_string_lossy().into_owned().into();
+    std::fs::create_dir_all(&fazi.options.crashes_dir).expect("failed to make crashes dir");
+
     unsafe { CRASHES_DIR = Some(fazi.options.crashes_dir.clone()) };
 }
 
