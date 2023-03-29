@@ -272,7 +272,9 @@ impl<R: Rng> Fazi<R> {
             .map(|input| input.data.clone())
             .collect();
 
-        self.input = Arc::clone(&self.restored_corpus[0].data);
+        if !self.restored_corpus.is_empty() {
+            self.input = Arc::clone(&self.restored_corpus[0].data);
+        }
     }
 
     /// Iterate over the inputs read from disk and replay them back.
