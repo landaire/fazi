@@ -146,7 +146,6 @@ pub extern "C" fn fazi_set_corpus_dir(dir: *const libc::c_char) {
     *corpus_dir = Some(path.clone());
 
     fazi.options.corpus_dir = path;
-
 }
 
 #[no_mangle]
@@ -266,7 +265,10 @@ pub extern "C" fn fazi_add_corpus_entry(data: *const u8, len: usize) {
         let extension = extension.map(|e| e.as_ref());
         save_input(corpus_dir, extension, data.as_ref());
 
-        fazi.corpus.push(crate::Input { coverage: 1, data: Arc::clone(&data) });
+        fazi.corpus.push(crate::Input {
+            coverage: 1,
+            data: Arc::clone(&data),
+        });
 
         if fazi.input.is_empty() && fazi.corpus.len() == 1 {
             fazi.input = data;

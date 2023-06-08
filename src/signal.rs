@@ -20,8 +20,8 @@ impl<R: Rng> Fazi<R> {
     pub fn setup_signal_handler(&self) {
         let mut signals = Signals::new(&[SIGABRT]).expect("failed to setup signal handler");
 
-        let crashes_dir = unsafe { &mut *CRASHES_DIR.0.get()  };
-        let inputs_dir = unsafe { &mut *INPUTS_DIR.0.get()  };
+        let crashes_dir = unsafe { &mut *CRASHES_DIR.0.get() };
+        let inputs_dir = unsafe { &mut *INPUTS_DIR.0.get() };
         *crashes_dir = Some(self.options.crashes_dir.clone());
         *inputs_dir = Some(self.options.corpus_dir.clone());
         unsafe { INPUTS_EXTENSION = self.options.artifact_extension.clone() };
@@ -61,8 +61,12 @@ impl<R: Rng> Fazi<R> {
 }
 
 pub(crate) extern "C" fn death_callback() {
-    let crashes_dir: &Path = unsafe { &*CRASHES_DIR.0.get() }.as_ref().expect("CRASHES_DIR not initialized");
-    let corpus_dir: &Path = unsafe { &*INPUTS_DIR.0.get() }.as_ref().expect("INPUTS_DIR not initialized");
+    let crashes_dir: &Path = unsafe { &*CRASHES_DIR.0.get() }
+        .as_ref()
+        .expect("CRASHES_DIR not initialized");
+    let corpus_dir: &Path = unsafe { &*INPUTS_DIR.0.get() }
+        .as_ref()
+        .expect("INPUTS_DIR not initialized");
     let extension: Option<&String> = unsafe { INPUTS_EXTENSION.as_ref() };
     let extension = extension.map(|e| e.as_ref());
 

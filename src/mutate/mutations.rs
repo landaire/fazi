@@ -252,7 +252,7 @@ impl<R: Rng> Fazi<R> {
             } else {
                 self.rng.gen_range(2..max_count)
             }
-        } else { 
+        } else {
             self.rng.gen_range(2..max_count)
         };
 
