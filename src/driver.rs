@@ -20,7 +20,7 @@ use std::{
     sync::{
         atomic::{AtomicBool, AtomicU8, Ordering},
         Arc, Mutex, RwLock,
-    },
+    }, cell::UnsafeCell,
 };
 
 use clap::StructOpt;
@@ -52,9 +52,13 @@ pub(crate) static ENABLE_COUNTERS: AtomicBool = AtomicBool::new(true);
 /// at which point we are about to exit and the fuzzer loop should not be running,
 /// so there should be no chance of a race condition.
 pub(crate) static mut LAST_INPUT: Option<Arc<Vec<u8>>> = None;
-pub(crate) static mut CRASHES_DIR: Option<PathBuf> = None;
-pub(crate) static mut INPUTS_DIR: Option<PathBuf> = None;
+pub(crate) static CRASHES_DIR: OneTimeGlobal<Option<PathBuf>> = OneTimeGlobal(UnsafeCell::new(None));
+pub(crate) static INPUTS_DIR: OneTimeGlobal<Option<PathBuf>> = OneTimeGlobal(UnsafeCell::new(None));
 pub(crate) static mut INPUTS_EXTENSION: Option<String> = None;
+
+#[derive(Default)]
+pub(crate) struct OneTimeGlobal<T>(pub UnsafeCell<T>);
+unsafe impl<T> Sync for OneTimeGlobal<T> {}
 
 #[cfg(feature = "main_entrypoint")]
 #[no_mangle]
@@ -169,7 +173,6 @@ impl<R: Rng> Fazi<R> {
             self.min_input_size = Some(min_input_size);
         }
 
-        let can_request_more_data = !self.min_input_size.is_some();
         let only_replay = self
             .options
             .replay_percentage
@@ -179,7 +182,7 @@ impl<R: Rng> Fazi<R> {
         if !only_replay && old_coverage != new_coverage {
             eprintln!(
                 "old coverage: {}, new coverage: {}, mutations: {:?}",
-                old_coverage, new_coverage, self.mutations
+                old_coverage, new_coverage, self.mutations.len()
             );
 
             // Check if this new coverage was the result of a dictionary entry
@@ -210,7 +213,7 @@ impl<R: Rng> Fazi<R> {
 
             let input = self.input.clone();
             let corpus_dir: &Path =
-                unsafe { INPUTS_DIR.as_ref().expect("INPUTS_DIR not initialized") };
+                unsafe { &*INPUTS_DIR.0.get() }.as_ref().expect("INPUTS_DIR not initialized");
             let extension: Option<&String> = unsafe { INPUTS_EXTENSION.as_ref() };
             let extension = extension.map(|e| e.as_ref());
 
@@ -227,7 +230,7 @@ impl<R: Rng> Fazi<R> {
                     .replay_percentage
                     .map(|p| self.rng.gen_bool(p))
                     .unwrap_or(false))
-                && !(need_more_data && can_request_more_data))
+                && need_more_data)
         {
             let next_input = if self.rng.gen_bool(0.10) {
                 self.corpus.peek()
@@ -254,7 +257,7 @@ impl<R: Rng> Fazi<R> {
             }
         }
 
-        let mutation = if !only_replay && need_more_data && can_request_more_data {
+        let mutation = if !only_replay && need_more_data {
             Some(self.extend_input())
         } else {
             if let Some(replay_chance) = self.options.replay_percentage {

@@ -459,6 +459,13 @@ impl<'a, R: Rng> FaziBuilder<'a, R> {
         self
     }
 
+    /// Sets the minimum size an input can be
+    pub fn min_input_len(mut self, len: usize) -> Self {
+        self.options.min_input_len = len;
+
+        self
+    }
+
     /// Sets the maximum size an input can be
     pub fn max_input_len(mut self, len: usize) -> Self {
         self.options.max_input_len = len;

@@ -246,7 +246,15 @@ impl<R: Rng> Fazi<R> {
             std::cmp::min(self.current_max_input_len, 128)
         };
 
-        let count: usize = self.rng.gen_range(2..max_count);
+        let count: usize = if let Some(min_size) = self.min_input_size {
+            if self.input.len() < min_size {
+                min_size - self.input.len()
+            } else {
+                self.rng.gen_range(2..max_count)
+            }
+        } else { 
+            self.rng.gen_range(2..max_count)
+        };
 
         let byte_iter: Box<dyn Iterator<Item = u8>> = if self.rng.gen() {
             Box::new(std::iter::repeat(self.rng.gen()).take(count))
@@ -259,7 +267,7 @@ impl<R: Rng> Fazi<R> {
         // Reserve the number of bytes necessary
         input.reserve(count);
 
-        if index == input.len() {
+        if index == input.len() || count > 1024 {
             input.extend(byte_iter);
         } else {
             // TODO: optimize. could use a repeating iterator here probably

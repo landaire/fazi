@@ -1,6 +1,6 @@
 use std::{
     ffi::CStr,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{atomic::Ordering, Arc, Mutex},
 };
 
@@ -138,11 +138,15 @@ pub extern "C" fn fazi_set_corpus_dir(dir: *const libc::c_char) {
         .expect("could not lock FAZI");
 
     let dir = unsafe { CStr::from_ptr(dir) };
+    let path: PathBuf = dir.to_string_lossy().into_owned().into();
 
-    fazi.options.corpus_dir = dir.to_string_lossy().into_owned().into();
-    std::fs::create_dir_all(&fazi.options.corpus_dir).expect("failed to make corpus dir");
+    std::fs::create_dir_all(&path).expect("failed to make corpus dir");
 
-    unsafe { INPUTS_DIR = Some(fazi.options.corpus_dir.clone()) };
+    let corpus_dir = unsafe { &mut *INPUTS_DIR.0.get() };
+    *corpus_dir = Some(path.clone());
+
+    fazi.options.corpus_dir = path;
+
 }
 
 #[no_mangle]
@@ -156,10 +160,14 @@ pub extern "C" fn fazi_set_crashes_dir(dir: *const libc::c_char) {
 
     let dir = unsafe { CStr::from_ptr(dir) };
 
-    fazi.options.crashes_dir = dir.to_string_lossy().into_owned().into();
-    std::fs::create_dir_all(&fazi.options.crashes_dir).expect("failed to make crashes dir");
+    let path: PathBuf = dir.to_string_lossy().into_owned().into();
 
-    unsafe { CRASHES_DIR = Some(fazi.options.crashes_dir.clone()) };
+    std::fs::create_dir_all(&path).expect("failed to make crashes dir");
+
+    let crashes_dir = unsafe { &mut *CRASHES_DIR.0.get() };
+    *crashes_dir = Some(path.clone());
+
+    fazi.options.crashes_dir = path;
 }
 
 #[no_mangle]
@@ -251,7 +259,7 @@ pub extern "C" fn fazi_add_corpus_entry(data: *const u8, len: usize) {
         .lock()
         .expect("could not lock FAZI");
 
-    if let Some(corpus_dir) = unsafe { INPUTS_DIR.as_ref() } {
+    if let Some(corpus_dir) = unsafe { &*INPUTS_DIR.0.get() } {
         let data = unsafe { std::slice::from_raw_parts(data, len) };
         let data: Arc<Vec<u8>> = Arc::new(data.into());
         let extension: Option<&String> = unsafe { INPUTS_EXTENSION.as_ref() };
@@ -276,6 +284,19 @@ pub extern "C" fn fazi_set_max_input_len(len: usize) {
         .expect("could not lock FAZI");
 
     fazi.options.max_input_len = len;
+}
+
+#[no_mangle]
+/// Set the max size an input can reach
+pub extern "C" fn fazi_set_min_input_len(len: usize) {
+    let mut fazi = FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
+
+    fazi.min_input_size = Some(len);
+    fazi.options.min_input_len = len;
 }
 
 #[no_mangle]
