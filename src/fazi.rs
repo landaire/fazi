@@ -85,8 +85,8 @@ pub struct Fazi<R: Rng> {
     pub(crate) last_corpus_update_run: usize,
     /// The last item that was run through recoverage
     pub(crate) last_recoverage_input: Option<Arc<Vec<u8>>>,
-    #[cfg(feature = "protobuf")]
-    pub(crate) protobuf_mutate_callback: Option<fn(&[u8], &mut Fazi<R>) -> Vec<u8>>,
+    #[cfg(feature = "structured_fuzzing")]
+    pub(crate) structurued_fuzzing_mutate_callback: Option<fn(&[u8], &mut Fazi<R>) -> Vec<u8>>,
     /// Last point in time when we gave a fuzzer status update
     pub(crate) last_update_time: Instant,
     pub(crate) backtrace_set: HashSet<[u8; 20]>,
@@ -112,7 +112,7 @@ impl<R: Rng + std::fmt::Debug> std::fmt::Debug for Fazi<R> {
             .field("last_recoverage_input", &self.last_recoverage_input)
             .field("last_update_time", &self.last_update_time)
             .finish()
-        //field("protobuf_mutate_callback", &self.protobuf_mutate_callback.map_or("None", |_| "Some(callback)"))
+        //field("structurued_fuzzing_mutate_callback", &self.structurued_fuzzing_mutate_callback.map_or("None", |_| "Some(callback)"))
     }
 }
 
@@ -134,8 +134,8 @@ impl Default for Fazi<StdRng> {
             last_corpus_update_run: 0,
             current_max_input_len: 4,
             last_recoverage_input: None,
-            #[cfg(feature = "protobuf")]
-            protobuf_mutate_callback: None,
+            #[cfg(feature = "structured_fuzzing")]
+            structurued_fuzzing_mutate_callback: None,
             last_update_time: Instant::now(),
             backtrace_set: HashSet::new(),
         }
@@ -234,8 +234,8 @@ impl<R: Rng> Fazi<R> {
             last_corpus_update_run: 0,
             current_max_input_len: 4,
             last_recoverage_input: None,
-            #[cfg(feature = "protobuf")]
-            protobuf_mutate_callback: None,
+            #[cfg(feature = "structured_fuzzing")]
+            structurued_fuzzing_mutate_callback: None,
             last_update_time: Instant::now(),
             backtrace_set: HashSet::new(),
         }

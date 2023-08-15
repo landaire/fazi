@@ -18,20 +18,19 @@ crate-type = ["rlib", "staticlib", "cdylib"]
 [dependencies]
 rand = "0.8"
 libc = "0.2"
-signal-hook ="0.3"
+signal-hook = "0.3"
 clap = { version = "3.0", features = ["derive"] }
 hex = "0.4"
 sha1 = "0.10"
 sha2 = "0.10"
 once_cell = "1.13"
 paste = "1.0"
-#protobuf = { version = "3.2", optional = true }
-protobuf = { version = "4.0.0-alpha.0", path = "../rust-protobuf/protobuf", optional = true }
+protobuf = { version = "4.0.0-alpha.0", git = "https://github.com/landaire/rust-protobuf.git", branch = "fazi", optional = true }
 thread-id = "4.0"
 backtrace = "0.3"
 
 [features]
-default = ["hook_builtins", "protobuf"]
+default = ["hook_builtins", "structured_fuzzing"]
 main_entrypoint = []
 hook_memcmp = []
 hook_bcmp = []
@@ -41,7 +40,18 @@ hook_strcasecmp = []
 hook_strstr = []
 hook_strcasestr = []
 hook_memem = []
-hook_builtins = ["hook_memcmp", "hook_bcmp", "hook_strncmp", "hook_strncasecmp", "hook_strcasecmp", "hook_strstr", "hook_strcasestr", "hook_memem"]
+hook_builtins = [
+    "hook_memcmp",
+    "hook_bcmp",
+    "hook_strncmp",
+    "hook_strncasecmp",
+    "hook_strcasecmp",
+    "hook_strstr",
+    "hook_strcasestr",
+    "hook_memem",
+]
+structured_fuzzing = []
+protobuf = ["dep:protobuf", "structured_fuzzing"]
 
 [[example]]
 name = "simple_harness"
