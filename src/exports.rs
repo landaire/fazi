@@ -5,6 +5,8 @@ use std::{
 };
 
 use clap::StructOpt;
+use rand::Rng;
+use sha1::Digest;
 
 use crate::{
     driver::{
@@ -358,4 +360,51 @@ pub extern "C" fn fazi_reset_coverage() {
         .lock()
         .expect("could not lock FAZI");
     fazi.clear_coverage();
+}
+
+#[no_mangle]
+pub extern "C" fn fazi_set_max_mutation_depth(depth: usize) {
+    let mut fazi = FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
+    fazi.options.max_mutation_depth = depth;
+}
+
+#[no_mangle]
+pub extern "C" fn fazi_gen_bool_with_probability(probability: f64) -> bool {
+    let mut fazi = FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
+
+    fazi.rng_mut().gen_bool(probability)
+}
+
+#[no_mangle]
+pub extern "C" fn fazi_has_backtrace_been_seen(depth: usize) -> bool {
+    // Grab a backtrace
+    let mut hasher = sha1::Sha1::new();
+    let mut curr_depth = 0;
+    backtrace::trace(|frame| {
+        hasher.update((frame.ip() as usize).to_be_bytes());
+
+        if curr_depth == depth {
+            false
+        } else {
+            curr_depth += 1;
+            true
+        }
+    });
+
+    let mut fazi = FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
+
+    fazi.backtrace_set
+        .insert(hasher.finalize().as_slice().try_into().unwrap())
 }

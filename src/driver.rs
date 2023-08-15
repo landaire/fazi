@@ -22,6 +22,7 @@ use std::{
         atomic::{AtomicBool, AtomicU8, Ordering},
         Arc, Mutex, RwLock,
     },
+    time::Instant,
 };
 
 use clap::StructOpt;
@@ -57,6 +58,7 @@ pub(crate) static CRASHES_DIR: OneTimeGlobal<Option<PathBuf>> =
     OneTimeGlobal(UnsafeCell::new(None));
 pub(crate) static INPUTS_DIR: OneTimeGlobal<Option<PathBuf>> = OneTimeGlobal(UnsafeCell::new(None));
 pub(crate) static mut INPUTS_EXTENSION: Option<String> = None;
+const STATUS_UPDATE_FREQ_SECS: u64 = 10;
 
 #[derive(Default)]
 pub(crate) struct OneTimeGlobal<T>(pub UnsafeCell<T>);
@@ -235,16 +237,13 @@ impl<R: Rng> Fazi<R> {
                     .replay_percentage
                     .map(|p| self.rng.gen_bool(p))
                     .unwrap_or(false))
-                && need_more_data)
+                || need_more_data)
         {
-            let next_input = if self.rng.gen_bool(0.10) {
-                self.corpus.peek()
-            } else {
-                self.corpus
-                    .iter()
-                    .filter(|input| input.data.len() >= self.min_input_size.unwrap_or(0))
-                    .choose(&mut self.rng)
-            };
+            let next_input = self
+                .corpus
+                .iter()
+                .filter(|input| input.data.len() >= self.min_input_size.unwrap_or(0))
+                .choose(&mut self.rng);
 
             if let Some(input) = next_input {
                 self.input = input.data.clone();
@@ -291,13 +290,9 @@ impl<R: Rng> Fazi<R> {
 
         self.iterations += 1;
 
-        let iteration_modulo = match self.iterations {
-            0..=100_000 => 1000,
-            100_001..=1_000_000 => 100_000,
-            _ => 1_000_000,
-        };
-        if self.iterations % iteration_modulo == 0 {
+        if self.last_update_time.elapsed().as_secs() >= STATUS_UPDATE_FREQ_SECS {
             eprintln!("iter: {}", self.iterations);
+            self.last_update_time = Instant::now();
         }
     }
 }

@@ -1,11 +1,14 @@
 use std::{
-    collections::BinaryHeap,
-    fs, panic,
+    collections::{BinaryHeap, HashSet},
+    fs,
+    hash::Hash,
+    panic,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
     },
+    time::Instant,
 };
 
 use crate::{
@@ -84,6 +87,9 @@ pub struct Fazi<R: Rng> {
     pub(crate) last_recoverage_input: Option<Arc<Vec<u8>>>,
     #[cfg(feature = "protobuf")]
     pub(crate) protobuf_mutate_callback: Option<fn(&[u8], &mut Fazi<R>) -> Vec<u8>>,
+    /// Last point in time when we gave a fuzzer status update
+    pub(crate) last_update_time: Instant,
+    pub(crate) backtrace_set: HashSet<[u8; 20]>,
 }
 
 impl<R: Rng + std::fmt::Debug> std::fmt::Debug for Fazi<R> {
@@ -104,6 +110,7 @@ impl<R: Rng + std::fmt::Debug> std::fmt::Debug for Fazi<R> {
             .field("current_max_input_len", &self.current_max_input_len)
             .field("last_corpus_update_run", &self.last_corpus_update_run)
             .field("last_recoverage_input", &self.last_recoverage_input)
+            .field("last_update_time", &self.last_update_time)
             .finish()
         //field("protobuf_mutate_callback", &self.protobuf_mutate_callback.map_or("None", |_| "Some(callback)"))
     }
@@ -129,6 +136,8 @@ impl Default for Fazi<StdRng> {
             last_recoverage_input: None,
             #[cfg(feature = "protobuf")]
             protobuf_mutate_callback: None,
+            last_update_time: Instant::now(),
+            backtrace_set: HashSet::new(),
         }
     }
 }
@@ -227,6 +236,8 @@ impl<R: Rng> Fazi<R> {
             last_recoverage_input: None,
             #[cfg(feature = "protobuf")]
             protobuf_mutate_callback: None,
+            last_update_time: Instant::now(),
+            backtrace_set: HashSet::new(),
         }
     }
 
