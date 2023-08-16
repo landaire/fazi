@@ -86,7 +86,7 @@ pub struct Fazi<R: Rng> {
     /// The last item that was run through recoverage
     pub(crate) last_recoverage_input: Option<Arc<Vec<u8>>>,
     #[cfg(feature = "structured_fuzzing")]
-    pub(crate) structurued_fuzzing_mutate_callback: Option<fn(&[u8], &mut Fazi<R>) -> Vec<u8>>,
+    pub(crate) structured_fuzzing_mutate_callback: Option<fn(&[u8], &mut Fazi<R>) -> Vec<u8>>,
     /// Last point in time when we gave a fuzzer status update
     pub(crate) last_update_time: Instant,
     pub(crate) backtrace_set: HashSet<[u8; 20]>,
@@ -135,7 +135,7 @@ impl Default for Fazi<StdRng> {
             current_max_input_len: 4,
             last_recoverage_input: None,
             #[cfg(feature = "structured_fuzzing")]
-            structurued_fuzzing_mutate_callback: None,
+            structured_fuzzing_mutate_callback: None,
             last_update_time: Instant::now(),
             backtrace_set: HashSet::new(),
         }
@@ -235,7 +235,7 @@ impl<R: Rng> Fazi<R> {
             current_max_input_len: 4,
             last_recoverage_input: None,
             #[cfg(feature = "structured_fuzzing")]
-            structurued_fuzzing_mutate_callback: None,
+            structured_fuzzing_mutate_callback: None,
             last_update_time: Instant::now(),
             backtrace_set: HashSet::new(),
         }
