@@ -1,7 +1,6 @@
 use std::{
     collections::{BinaryHeap, HashSet},
     fs,
-    hash::Hash,
     panic,
     path::{Path, PathBuf},
     sync::{

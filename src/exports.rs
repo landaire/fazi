@@ -1,7 +1,6 @@
 use std::{
     ffi::CStr,
-    hint::black_box,
-    path::{Path, PathBuf},
+    path::{PathBuf},
     sync::{atomic::Ordering, Arc, Mutex},
 };
 
@@ -11,7 +10,7 @@ use sha1::Digest;
 
 use crate::{
     driver::{
-        save_input, update_coverage, write_input, COMPARISON_OPERANDS, COV_THREADS, CRASHES_DIR,
+        save_input, write_input, COMPARISON_OPERANDS, COV_THREADS, CRASHES_DIR,
         ENABLE_COUNTERS, FAZI, FAZI_INITIALIZED, INPUTS_DIR, INPUTS_EXTENSION,
     },
     options::RuntimeOptions,
@@ -419,7 +418,7 @@ pub extern "C" fn fazi_has_backtrace_been_seen(depth: usize) -> bool {
 
 #[no_mangle]
 pub extern "C" fn fazi_write_last_message(data: *const u8, len: usize) {
-    let fazi = FAZI
+    let _fazi = FAZI
         .get()
         .expect("FAZI not initialized")
         .lock()

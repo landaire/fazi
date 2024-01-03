@@ -7,16 +7,12 @@ use sha1::{Digest, Sha1};
 
 use crate::{
     dictionary::DictionaryEntry,
-    exports::fazi_initialize,
-    options::RuntimeOptions,
     sancov::{ComparisonOperandMap, PcEntry},
     weak_imports::*,
     Fazi, Input,
 };
 use std::{
-    cell::UnsafeCell,
     collections::HashSet,
-    ffi::CString,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, AtomicU8, Ordering},
@@ -25,9 +21,9 @@ use std::{
     time::Instant,
 };
 
-use clap::StructOpt;
 
-use crate::options::Command;
+
+
 
 /// Global map of comparison operands from SanCov instrumentation
 pub(crate) static COMPARISON_OPERANDS: OnceCell<Mutex<ComparisonOperandMap>> = OnceCell::new();
@@ -312,7 +308,7 @@ pub(crate) fn clear_coverage() {
         .expect("U8_COUNTERS not initialized")
         .lock()
         .expect("failed to lock U8_COUNTERS");
-    let module_pc_info = PC_INFO
+    let _module_pc_info = PC_INFO
         .get()
         .expect("PC_INFO not initialize")
         .lock()

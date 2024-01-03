@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
-use once_cell::sync::OnceCell;
+#[cfg(feature = "protobuf")]
+use protobuf::Message;
 use rand::Rng;
 
-use crate::{Fazi, Mutable};
+use crate::Fazi;
 #[cfg(feature = "structured_fuzzing")]
 impl<R: Rng> Fazi<R> {
     pub(crate) fn mutate_structured_fuzzing_input(&mut self) -> bool {

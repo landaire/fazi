@@ -4,7 +4,7 @@ use rand::{
     prelude::{IteratorRandom, SliceRandom},
     Rng,
 };
-use sha1::digest::typenum::Integer;
+
 
 use crate::dictionary::DictionaryEntry;
 use crate::{driver::COMPARISON_OPERANDS, Fazi};
