@@ -1,5 +1,6 @@
 use std::{
     ffi::CStr,
+    hint::black_box,
     path::{Path, PathBuf},
     sync::{atomic::Ordering, Arc, Mutex},
 };
@@ -10,7 +11,7 @@ use sha1::Digest;
 
 use crate::{
     driver::{
-        save_input, update_coverage, COMPARISON_OPERANDS, COV_THREADS, CRASHES_DIR,
+        save_input, update_coverage, write_input, COMPARISON_OPERANDS, COV_THREADS, CRASHES_DIR,
         ENABLE_COUNTERS, FAZI, FAZI_INITIALIZED, INPUTS_DIR, INPUTS_EXTENSION,
     },
     options::RuntimeOptions,
@@ -54,9 +55,12 @@ pub extern "C" fn fazi_set_artifact_extension(extension: *const libc::c_char) {
         .expect("could not lock FAZI");
 
     let extension = unsafe { CStr::from_ptr(extension) };
+    let extension = extension.to_string_lossy().into_owned();
+    INPUTS_EXTENSION
+        .set(extension.clone())
+        .expect("input extension has already been set");
 
-    fazi.options.artifact_extension = extension.to_string_lossy().into_owned().into();
-    unsafe { INPUTS_EXTENSION = fazi.options.artifact_extension.clone() };
+    fazi.options.artifact_extension = extension.into();
 }
 
 #[no_mangle]
@@ -144,8 +148,9 @@ pub extern "C" fn fazi_set_corpus_dir(dir: *const libc::c_char) {
 
     std::fs::create_dir_all(&path).expect("failed to make corpus dir");
 
-    let corpus_dir = unsafe { &mut *INPUTS_DIR.0.get() };
-    *corpus_dir = Some(path.clone());
+    INPUTS_DIR
+        .set(path.clone())
+        .expect("corpus dir has already been set");
 
     fazi.options.corpus_dir = path;
 }
@@ -165,8 +170,9 @@ pub extern "C" fn fazi_set_crashes_dir(dir: *const libc::c_char) {
 
     std::fs::create_dir_all(&path).expect("failed to make crashes dir");
 
-    let crashes_dir = unsafe { &mut *CRASHES_DIR.0.get() };
-    *crashes_dir = Some(path.clone());
+    CRASHES_DIR
+        .set(path.clone())
+        .expect("crashes dir has already been set");
 
     fazi.options.crashes_dir = path;
 }
@@ -260,10 +266,10 @@ pub extern "C" fn fazi_add_corpus_entry(data: *const u8, len: usize) {
         .lock()
         .expect("could not lock FAZI");
 
-    if let Some(corpus_dir) = unsafe { &*INPUTS_DIR.0.get() } {
+    if let Some(corpus_dir) = INPUTS_DIR.get() {
         let data = unsafe { std::slice::from_raw_parts(data, len) };
         let data: Arc<Vec<u8>> = Arc::new(data.into());
-        let extension: Option<&String> = unsafe { INPUTS_EXTENSION.as_ref() };
+        let extension: Option<&String> = INPUTS_EXTENSION.get();
         let extension = extension.map(|e| e.as_ref());
         save_input(corpus_dir, extension, data.as_ref());
 
@@ -275,6 +281,8 @@ pub extern "C" fn fazi_add_corpus_entry(data: *const u8, len: usize) {
         if fazi.input.is_empty() && fazi.corpus.len() == 1 {
             fazi.input = data;
         }
+    } else {
+        eprintln!("fazi_add_corpus_entry: INPUTS_DIR not initialized");
     }
 }
 
@@ -407,4 +415,26 @@ pub extern "C" fn fazi_has_backtrace_been_seen(depth: usize) -> bool {
 
     fazi.backtrace_set
         .insert(hasher.finalize().as_slice().try_into().unwrap())
+}
+
+#[no_mangle]
+pub extern "C" fn fazi_write_last_message(data: *const u8, len: usize) {
+    let fazi = FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
+
+    if let Some(corpus_dir) = INPUTS_DIR.get() {
+        let mut corpus_file_path = corpus_dir.join("input-last");
+        if let Some(extension) = INPUTS_EXTENSION.get() {
+            corpus_file_path.set_extension(extension);
+        }
+
+        let input = unsafe { std::slice::from_raw_parts(data, len) };
+
+        write_input(&corpus_file_path, input)
+    } else {
+        eprintln!("fazi_write_last_message: INPUTS_DIR not initialized");
+    }
 }

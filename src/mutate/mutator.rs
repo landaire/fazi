@@ -175,7 +175,7 @@ impl Mutable for String {
         }
 
         // Give a low chance to append a new char
-        if fazi.rng.gen_bool(0.10) {
+        if self.is_empty() || fazi.rng.gen_bool(0.10) {
             let count = fazi.rng.gen_range(1..=10);
             for _ in 0..count {
                 self.push(generate_char(&mut fazi.rng));
@@ -225,7 +225,7 @@ where
         }
 
         // Give a low chance to append a new element
-        if fazi.rng.gen_bool(0.10) {
+        if self.is_empty() || fazi.rng.gen_bool(0.10) {
             let count = fazi.rng.gen_range(1..=10);
             for _ in 0..count {
                 let mut new_item = T::default();
@@ -262,7 +262,11 @@ where
     fn mutate<R: Rng>(&mut self, fazi: &mut Fazi<R>) {
         match self {
             Some(value) => {
-                value.mutate(fazi);
+                if fazi.rng.gen_bool(0.10) {
+                    *self = None;
+                } else {
+                    value.mutate(fazi);
+                }
             }
             None => {
                 if fazi.rng.gen::<bool>() {

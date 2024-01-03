@@ -162,7 +162,7 @@ impl Fazi<StdRng> {
 }
 
 const MAX_MUTATION_DEPTH: usize = 100;
-const MAX_LEAF_FIELDS: usize = 10;
+const MAX_LEAF_FIELDS: usize = 1000;
 pub(crate) static MUTATION_DEPTH: AtomicUsize = AtomicUsize::new(0);
 pub(crate) static LEAF_FIELDS_MUTATED: AtomicUsize = AtomicUsize::new(0);
 pub(crate) static STOP_MUTATING: AtomicBool = AtomicBool::new(false);
@@ -183,8 +183,12 @@ impl MutationGuard {
             LEAF_FIELDS_MUTATED.fetch_add(1, Ordering::SeqCst);
         }
 
-        let mutate_this_field = fazi.rng.gen::<bool>();
-        let stop_mutating = if fazi.rng.gen_bool(0.001) {
+        let mutate_this_field = if is_primitive_type {
+            fazi.rng.gen::<bool>()
+        } else {
+            fazi.rng.gen_bool(0.10)
+        };
+        let stop_mutating = if fazi.rng.gen_bool(0.01) {
             STOP_MUTATING.store(true, Ordering::SeqCst);
             true
         } else if mutate_this_field {

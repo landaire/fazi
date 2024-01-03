@@ -20,7 +20,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, AtomicU8, Ordering},
-        Arc, Mutex, RwLock,
+        Arc, Mutex, OnceLock, RwLock,
     },
     time::Instant,
 };
@@ -54,15 +54,10 @@ pub(crate) static ENABLE_COUNTERS: AtomicBool = AtomicBool::new(true);
 /// at which point we are about to exit and the fuzzer loop should not be running,
 /// so there should be no chance of a race condition.
 pub(crate) static mut LAST_INPUT: Option<Arc<Vec<u8>>> = None;
-pub(crate) static CRASHES_DIR: OneTimeGlobal<Option<PathBuf>> =
-    OneTimeGlobal(UnsafeCell::new(None));
-pub(crate) static INPUTS_DIR: OneTimeGlobal<Option<PathBuf>> = OneTimeGlobal(UnsafeCell::new(None));
-pub(crate) static mut INPUTS_EXTENSION: Option<String> = None;
+pub(crate) static CRASHES_DIR: OnceLock<PathBuf> = OnceLock::new();
+pub(crate) static INPUTS_DIR: OnceLock<PathBuf> = OnceLock::new();
+pub(crate) static INPUTS_EXTENSION: OnceLock<String> = OnceLock::new();
 const STATUS_UPDATE_FREQ_SECS: u64 = 10;
-
-#[derive(Default)]
-pub(crate) struct OneTimeGlobal<T>(pub UnsafeCell<T>);
-unsafe impl<T> Sync for OneTimeGlobal<T> {}
 
 #[cfg(feature = "main_entrypoint")]
 #[no_mangle]
@@ -218,10 +213,11 @@ impl<R: Rng> Fazi<R> {
             });
 
             let input = self.input.clone();
-            let corpus_dir: &Path = unsafe { &*INPUTS_DIR.0.get() }
+            let corpus_dir: &Path = INPUTS_DIR
+                .get()
                 .as_ref()
                 .expect("INPUTS_DIR not initialized");
-            let extension: Option<&String> = unsafe { INPUTS_EXTENSION.as_ref() };
+            let extension: Option<&String> = INPUTS_EXTENSION.get();
             let extension = extension.map(|e| e.as_ref());
 
             std::thread::spawn(move || {
@@ -401,9 +397,13 @@ pub(crate) fn save_input(corpus_dir: &Path, extension: Option<&str>, input: &[u8
     }
 
     eprintln!("Saving corpus input to {:?}", corpus_file_path);
-    ensure_parent_dir_exists(corpus_file_path.as_ref());
 
-    std::fs::write(corpus_file_path, input).expect("failed to save corpus input file!");
+    write_input(&corpus_file_path, input);
+}
+
+pub(crate) fn write_input(path: &Path, input: &[u8]) {
+    ensure_parent_dir_exists(path);
+    std::fs::write(path, input).expect("failed to save corpus input file!");
 }
 
 /// Ensures that the parent directory of `path` exists. If it does not, we will
