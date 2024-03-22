@@ -1,6 +1,6 @@
 use std::{
     ffi::CStr,
-    path::{PathBuf},
+    path::PathBuf,
     sync::{atomic::Ordering, Arc, Mutex},
 };
 
@@ -10,8 +10,8 @@ use sha1::Digest;
 
 use crate::{
     driver::{
-        save_input, write_input, COMPARISON_OPERANDS, COV_THREADS, CRASHES_DIR,
-        ENABLE_COUNTERS, FAZI, FAZI_INITIALIZED, INPUTS_DIR, INPUTS_EXTENSION,
+        save_input, write_input, COMPARISON_OPERANDS, COV_THREADS, CRASHES_DIR, ENABLE_COUNTERS,
+        FAZI, FAZI_INITIALIZED, INPUTS_DIR, INPUTS_EXTENSION,
     },
     options::RuntimeOptions,
     sancov::reset_pc_guards,
@@ -145,11 +145,7 @@ pub extern "C" fn fazi_set_corpus_dir(dir: *const libc::c_char) {
     let dir = unsafe { CStr::from_ptr(dir) };
     let path: PathBuf = dir.to_string_lossy().into_owned().into();
 
-    std::fs::create_dir_all(&path).expect("failed to make corpus dir");
-
-    INPUTS_DIR
-        .set(path.clone())
-        .expect("corpus dir has already been set");
+    crate::fazi::set_corpus_dir(&path);
 
     fazi.options.corpus_dir = path;
 }
@@ -167,11 +163,7 @@ pub extern "C" fn fazi_set_crashes_dir(dir: *const libc::c_char) {
 
     let path: PathBuf = dir.to_string_lossy().into_owned().into();
 
-    std::fs::create_dir_all(&path).expect("failed to make crashes dir");
-
-    CRASHES_DIR
-        .set(path.clone())
-        .expect("crashes dir has already been set");
+    crate::fazi::set_crashes_dir(&path);
 
     fazi.options.crashes_dir = path;
 }

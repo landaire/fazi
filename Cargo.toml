@@ -28,10 +28,13 @@ paste = "1.0"
 protobuf = { version = "4.0.0-alpha.0", git = "https://github.com/landaire/rust-protobuf.git", branch = "fazi", package = "protobuf", optional = true }
 thread-id = "4.0"
 backtrace = "0.3"
+indicatif = {version = "0.17", optional = true}
+serde = {version = "1.0", features =["derive"] }
+serde_json = { version = "1.0"}
 
 [features]
 default = ["hook_builtins", "structured_fuzzing"]
-main_entrypoint = []
+main_entrypoint = ["dep:indicatif"]
 hook_memcmp = []
 hook_bcmp = []
 hook_strncmp = []

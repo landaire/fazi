@@ -5,7 +5,9 @@ use std::{
 };
 
 use crate::{
-    driver::{COMPARISON_OPERANDS, COV_THREADS, PC_INFO, TESTCASE_COVERAGE, U8_COUNTERS},
+    driver::{
+        COMPARISON_OPERANDS, COV_THREADS, FAZI_INITIALIZED, PC_INFO, TESTCASE_COVERAGE, U8_COUNTERS,
+    },
     exports::fazi_initialize,
 };
 
@@ -146,6 +148,9 @@ impl ComparisonOperandMap {
 
 #[inline]
 fn should_record_coverage() -> bool {
+    if !FAZI_INITIALIZED.load(Ordering::Relaxed) {
+        return false;
+    }
     let cov_threads = COV_THREADS
         .get()
         .expect("Failed to get COV_THREADS")
@@ -636,7 +641,9 @@ pub(crate) fn memcmp_internal(
     result: std::os::raw::c_int,
     insert_null_terminator: bool,
 ) {
-    fazi_initialize();
+    if !should_record_coverage() {
+        return;
+    }
 
     match TESTCASE_COVERAGE
         .get()

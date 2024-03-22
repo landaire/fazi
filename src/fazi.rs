@@ -1,18 +1,20 @@
 use std::{
     collections::{BinaryHeap, HashSet},
-    fs,
-    panic,
+    fs, panic,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
-        Arc,
+        Arc, Mutex,
     },
     time::Instant,
 };
 
 use crate::{
     dictionary::{Dictionary, DictionaryEntry},
-    driver::TESTCASE_COVERAGE,
+    driver::{
+        UpdateCoverageResult, CORPUS_METADATA, CRASHES_DIR, INPUTS_DIR, LAST_INPUT,
+        PERFORMING_RECOVERAGE, TESTCASE_COVERAGE,
+    },
     options::RuntimeOptions,
 };
 
@@ -23,6 +25,8 @@ use crate::driver::{
 use crate::mutate::MutationStrategy;
 
 use rand::{prelude::*, SeedableRng};
+use serde::{Deserialize, Serialize};
+use sha1::Sha1;
 use sha2::{Digest, Sha256};
 
 #[derive(Debug, Clone)]
@@ -49,6 +53,11 @@ impl Ord for Input {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.coverage.cmp(&other.coverage)
     }
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub(crate) struct CorpusMetadata {
+    pub ignore_input_hashes: HashSet<Vec<u8>>,
 }
 
 /// Main Fazi structure that holds our state.
@@ -252,12 +261,26 @@ impl<R: Rng> Fazi<R> {
         &mut self.rng
     }
 
+    pub fn load_corpus_metadata(&mut self) {
+        if let Ok(metadata) = std::fs::read("corpus_metadata.json") {
+            if let Ok(metadata) = serde_json::from_slice::<CorpusMetadata>(metadata.as_slice()) {
+                CORPUS_METADATA
+                    .set(Mutex::new(metadata))
+                    .expect("failed to set CORPUS_METADATA");
+                return;
+            }
+        }
+        CORPUS_METADATA
+            .set(Mutex::new(CorpusMetadata::default()))
+            .expect("failed to set CORPUS_METADATA");
+    }
+
     /// Load inputs from disk
     pub fn restore_inputs(&mut self) {
         let input_paths: [&Path; 1] = [self.options.corpus_dir.as_ref()];
         for &path in &input_paths {
             if !path.exists() || !path.is_dir() {
-                panic!("???");
+                panic!("Input path {:?} does not exist", path);
             }
 
             for dirent in fs::read_dir(path).expect("failed to read input directory") {
@@ -267,12 +290,29 @@ impl<R: Rng> Fazi<R> {
                         continue;
                     }
 
-                    self.restored_corpus.push(Input {
-                        coverage: 0,
-                        data: Arc::new(
-                            fs::read(input_file_path).expect("failed to read input file"),
-                        ),
-                    });
+                    let input_data = fs::read(input_file_path).expect("failed to read input file");
+                    let mut ignore_input = false;
+                    if let Some(meta) = CORPUS_METADATA.get() {
+                        if let Ok(meta) = meta.try_lock() {
+                            let mut input_hasher = Sha1::new();
+                            input_hasher.update(input_data.as_slice());
+
+                            let result = input_hasher.finalize();
+                            for skip_hash in &meta.ignore_input_hashes {
+                                if skip_hash.as_slice() == result.as_slice() {
+                                    ignore_input = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if !ignore_input {
+                        self.restored_corpus.push(Input {
+                            coverage: 0,
+                            data: Arc::new(input_data),
+                        });
+                    }
                 }
             }
         }
@@ -292,9 +332,11 @@ impl<R: Rng> Fazi<R> {
     }
 
     /// Iterate over the inputs read from disk and replay them back.
-    pub fn perform_recoverage(&mut self, callback: impl Fn(&[u8])) {
+    pub fn perform_recoverage(&mut self, mut callback: impl FnMut(&[u8])) {
+        PERFORMING_RECOVERAGE.store(true, Ordering::Relaxed);
         while let Some(input) = self.recoverage_queue.pop() {
             self.last_recoverage_input = Some(Arc::clone(&input));
+            *LAST_INPUT.get().unwrap().lock().unwrap() = self.last_recoverage_input.clone();
 
             poison_input(&input);
 
@@ -305,6 +347,8 @@ impl<R: Rng> Fazi<R> {
             self.recoverage_testcase_end();
         }
         self.recoverage_testcase_end();
+        self.last_recoverage_input = None;
+        PERFORMING_RECOVERAGE.store(false, Ordering::Relaxed);
     }
 
     /// Iterate over the inputs read from disk and replay them back.
@@ -356,6 +400,9 @@ impl<R: Rng> Fazi<R> {
         COV_THREADS
             .set(Default::default())
             .expect("COV_THREADS already initialized");
+        LAST_INPUT
+            .set(Default::default())
+            .expect("LAST_INPUT already initialized");
 
         FAZI_INITIALIZED.store(true, Ordering::Relaxed);
     }
@@ -365,9 +412,9 @@ impl<R: Rng> Fazi<R> {
         if let Some(recoverage_input) = self.last_recoverage_input.take() {
             for input in &mut self.restored_corpus {
                 if input.data.as_ptr() == recoverage_input.as_ptr() {
-                    let (_, _, input_coverage) = update_coverage();
+                    let coverage = update_coverage();
 
-                    input.coverage = input_coverage;
+                    input.coverage = coverage.input_cov;
                     break;
                 }
             }
@@ -523,6 +570,9 @@ impl<'a, R: Rng> FaziBuilder<'a, R> {
         }
 
         fazi.initialize_globals();
+        set_corpus_dir(&fazi.options.corpus_dir);
+        set_crashes_dir(&fazi.options.crashes_dir);
+
         fazi.restore_inputs();
 
         let callback = self.harness_callback.unwrap();
@@ -535,4 +585,22 @@ impl<'a, R: Rng> FaziBuilder<'a, R> {
             fazi.fuzz(&callback);
         }
     }
+}
+
+pub(crate) fn set_corpus_dir(path: &Path) {
+    println!("{:?}", path);
+    std::fs::create_dir_all(&path).expect("failed to make corpus dir");
+
+    INPUTS_DIR
+        .set(path.to_owned())
+        .expect("corpus dir has already been set");
+}
+
+pub(crate) fn set_crashes_dir(path: &Path) {
+    println!("{:?}", path);
+    std::fs::create_dir_all(&path).expect("failed to make crashes dir");
+
+    CRASHES_DIR
+        .set(path.to_owned())
+        .expect("crashes dir has already been set");
 }

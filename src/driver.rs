@@ -3,16 +3,21 @@ use rand::{
     prelude::{IteratorRandom, StdRng},
     Rng,
 };
-use sha1::{Digest, Sha1};
+use serde::{Deserialize, Serialize};
+use sha1::{
+    digest::{generic_array::GenericArray, Output},
+    Digest, Sha1,
+};
 
 use crate::{
     dictionary::DictionaryEntry,
     sancov::{ComparisonOperandMap, PcEntry},
     weak_imports::*,
-    Fazi, Input,
+    CorpusMetadata, Fazi, Input,
 };
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
+    io::Write,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, AtomicU8, Ordering},
@@ -21,14 +26,10 @@ use std::{
     time::Instant,
 };
 
-
-
-
-
 /// Global map of comparison operands from SanCov instrumentation
 pub(crate) static COMPARISON_OPERANDS: OnceCell<Mutex<ComparisonOperandMap>> = OnceCell::new();
-/// Set of PCs that the fuzzer has reached
-pub(crate) static COVERAGE: OnceCell<Mutex<HashSet<usize>>> = OnceCell::new();
+/// Set of PCs that the fuzzer has reached and the counter for that PC
+pub(crate) static COVERAGE: OnceCell<Mutex<HashMap<usize, usize>>> = OnceCell::new();
 /// Set of PCs that the fuzzer has reached for this testcase
 pub(crate) static TESTCASE_COVERAGE: OnceCell<Mutex<HashSet<usize>>> = OnceCell::new();
 /// The global [`Fazi`] instance. We need to keep a global pointer as the SanCov and
@@ -49,20 +50,41 @@ pub(crate) static ENABLE_COUNTERS: AtomicBool = AtomicBool::new(true);
 /// SAFETY: This value should only ever be read from the [`signal::death_callback()`],
 /// at which point we are about to exit and the fuzzer loop should not be running,
 /// so there should be no chance of a race condition.
-pub(crate) static mut LAST_INPUT: Option<Arc<Vec<u8>>> = None;
+pub(crate) static LAST_INPUT: OnceLock<Mutex<Option<Arc<Vec<u8>>>>> = OnceLock::new();
 pub(crate) static CRASHES_DIR: OnceLock<PathBuf> = OnceLock::new();
 pub(crate) static INPUTS_DIR: OnceLock<PathBuf> = OnceLock::new();
 pub(crate) static INPUTS_EXTENSION: OnceLock<String> = OnceLock::new();
+pub(crate) static PERFORMING_RECOVERAGE: AtomicBool = AtomicBool::new(false);
+pub(crate) static CORPUS_METADATA: OnceLock<Mutex<CorpusMetadata>> = OnceLock::new();
 const STATUS_UPDATE_FREQ_SECS: u64 = 10;
 
 #[cfg(feature = "main_entrypoint")]
 #[no_mangle]
 extern "C" fn main() {
+    use std::ffi::CString;
+
+    use clap::Parser;
+
+    use crate::{
+        exports::fazi_initialize,
+        options::{Command, RuntimeOptions},
+    };
+
     fazi_initialize();
+
+    let mut fazi = FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
+
+    fazi.set_options(RuntimeOptions::parse());
+    drop(fazi);
 
     let run_input = libfuzzer_runone_fn();
     let user_initialize = libfuzzer_initialize_fn();
     if let Some(user_initialize) = user_initialize {
+        println!("calling user initialize");
         let program_name = CString::new(std::env::args().next().unwrap()).unwrap();
         let args = [program_name.as_ptr()];
         let mut argv = &args;
@@ -73,6 +95,8 @@ extern "C" fn main() {
                 (&mut argv as *mut _) as *mut *const *const libc::c_char,
             );
         }
+    } else {
+        println!("no user initialize provided?");
     }
 
     let mut fazi = FAZI
@@ -81,7 +105,9 @@ extern "C" fn main() {
         .lock()
         .expect("could not lock FAZI");
 
-    fazi.set_options(RuntimeOptions::parse());
+    crate::fazi::set_corpus_dir(&fazi.options.corpus_dir);
+    crate::fazi::set_crashes_dir(&fazi.options.crashes_dir);
+    fazi.load_corpus_metadata();
     fazi.restore_inputs();
     fazi.setup_signal_handler();
 
@@ -99,9 +125,13 @@ extern "C" fn main() {
         None => {
             eprintln!("Performing recoverage");
 
+            let bar = indicatif::ProgressBar::new(fazi.recoverage_queue.len() as u64);
             fazi.perform_recoverage(|input| unsafe {
+                bar.inc(1);
+
                 run_input(input.as_ptr(), input.len());
             });
+            bar.finish();
         }
     }
 
@@ -121,9 +151,7 @@ impl<R: Rng> Fazi<R> {
     pub fn start_iteration(&mut self) {
         poison_input(self.input.as_ref());
         self.update_max_size();
-        unsafe {
-            LAST_INPUT = Some(self.input.clone());
-        }
+        *LAST_INPUT.get().unwrap().lock().unwrap() = Some(self.input.clone());
         update_coverage();
     }
 
@@ -156,7 +184,13 @@ impl<R: Rng> Fazi<R> {
     pub fn end_iteration(&mut self, need_more_data: bool) {
         unpoison_input(self.input.as_ref());
 
-        let (new_coverage, old_coverage, input_coverage) = update_coverage();
+        let UpdateCoverageResult {
+            new_pc_count: new_coverage,
+            old_pc_count: old_coverage,
+            input_cov: input_coverage,
+            old_cov_hash,
+            new_cov_hash,
+        } = update_coverage();
 
         if !need_more_data {
             let min_input_size = if let Some(min_input_size) = self.min_input_size {
@@ -174,7 +208,7 @@ impl<R: Rng> Fazi<R> {
             .map(|p| p >= 1.0)
             .unwrap_or(false);
 
-        if !only_replay && old_coverage != new_coverage {
+        if !only_replay && old_cov_hash != new_cov_hash {
             eprintln!(
                 "old coverage: {}, new coverage: {}, mutations: {:?}",
                 old_coverage,
@@ -320,12 +354,32 @@ pub(crate) fn clear_coverage() {
     }
 }
 
-pub(crate) fn update_coverage() -> (usize, usize, usize) {
+pub struct UpdateCoverageResult {
+    pub new_pc_count: usize,
+    pub old_pc_count: usize,
+    pub input_cov: usize,
+    pub old_cov_hash: Output<Sha1>,
+    pub new_cov_hash: Output<Sha1>,
+}
+
+fn coverage_hash(cov: &HashMap<usize, usize>) -> Output<Sha1> {
+    let mut hash = Sha1::new();
+    for (key, value) in cov {
+        hash.update(key.to_be_bytes().as_slice());
+        hash.update(value.to_be_bytes().as_slice());
+    }
+
+    hash.finalize()
+}
+
+pub(crate) fn update_coverage() -> UpdateCoverageResult {
     let mut coverage = COVERAGE
         .get()
         .expect("failed to get COVERAGE")
         .lock()
         .expect("failed to lock COVERAGE");
+
+    let old_cov_hash = coverage_hash(&coverage);
 
     let mut testcase_coverage = TESTCASE_COVERAGE
         .get()
@@ -345,15 +399,19 @@ pub(crate) fn update_coverage() -> (usize, usize, usize) {
         .expect("PC_INFO not initialize")
         .lock()
         .expect("failed to lock PC_INFO");
+
+    // coverage.clear();
+
     // Skip the counters when updating coverage if limiting coverage to specific threads
     // These in-lined counters have no callback, which makes it impossible to determine the thread that hit the counter.
     // Can get same info (with small perf hit) by enabling -fsanitize-coverage=trace-pc-guard and/or -fsanitize-coverage=trace-pc
     if ENABLE_COUNTERS.load(Ordering::Relaxed) {
         for (module_idx, module_counters) in u8_counters.iter().enumerate() {
             for (counter_idx, counter) in module_counters.iter().enumerate() {
-                if counter.load(Ordering::Relaxed) > 0 {
+                let count = counter.load(Ordering::Relaxed);
+                if count > 0 {
                     let pc_info = &module_pc_info[module_idx][counter_idx];
-                    coverage.insert(pc_info.pc);
+                    *coverage.entry(pc_info.pc).or_default() = 1;
                     counter.store(0, Ordering::Relaxed);
                     input_coverage += 1;
                 }
@@ -361,9 +419,21 @@ pub(crate) fn update_coverage() -> (usize, usize, usize) {
         }
     }
 
-    coverage.extend(testcase_coverage.drain());
+    for pc in testcase_coverage.drain() {
+        if let None = coverage.get(&pc) {
+            coverage.insert(pc, 1);
+        }
+    }
 
-    (coverage.len(), old_coverage, input_coverage)
+    let new_cov_hash = coverage_hash(&coverage);
+
+    UpdateCoverageResult {
+        new_pc_count: coverage.len(),
+        old_pc_count: old_coverage,
+        input_cov: input_coverage,
+        old_cov_hash: old_cov_hash,
+        new_cov_hash: new_cov_hash,
+    }
 }
 
 pub(crate) fn handle_crash(crashes_dir: &Path, extension: Option<&str>, input: &[u8]) {
@@ -380,6 +450,20 @@ pub(crate) fn handle_crash(crashes_dir: &Path, extension: Option<&str>, input: &
     ensure_parent_dir_exists(crash_file_path.as_ref());
 
     std::fs::write(crash_file_path, input).expect("failed to save crash file!");
+
+    if PERFORMING_RECOVERAGE.load(Ordering::Relaxed) {
+        if let Some(metadata) = CORPUS_METADATA.get() {
+            if let Ok(mut metadata) = metadata.try_lock() {
+                metadata
+                    .ignore_input_hashes
+                    .insert(result.as_slice().to_vec());
+
+                if let Ok(mut output) = std::fs::File::create("corpus_metadata.json") {
+                    let _ = serde_json::to_writer(&mut output, &*metadata);
+                }
+            }
+        }
+    }
 }
 
 pub(crate) fn save_input(corpus_dir: &Path, extension: Option<&str>, input: &[u8]) {

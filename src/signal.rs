@@ -4,7 +4,7 @@ use std::{
     thread,
 };
 
-use libc::SIGABRT;
+use libc::{SIGABRT, SIGSEGV};
 use rand::Rng;
 use signal_hook::iterator::Signals;
 
@@ -21,6 +21,7 @@ impl<R: Rng> Fazi<R> {
         let mut signals = Signals::new(&[SIGABRT]).expect("failed to setup signal handler");
 
         if let Some(set_death_callback) = sanitizer_set_death_callback_fn() {
+            eprintln!("Setting death callback");
             unsafe {
                 set_death_callback(death_callback);
             }
@@ -28,9 +29,7 @@ impl<R: Rng> Fazi<R> {
 
         thread::spawn(move || {
             for sig in signals.forever() {
-                if sig == SIGABRT {
-                    death_callback();
-                }
+                // death_callback();
             }
         });
     }
@@ -55,14 +54,13 @@ impl<R: Rng> Fazi<R> {
 }
 
 pub(crate) extern "C" fn death_callback() {
+    eprintln!("Death callback called");
     let crashes_dir: &Path = CRASHES_DIR.get().expect("CRASHES_DIR not initialized");
-    let corpus_dir: &Path = INPUTS_DIR.get().expect("INPUTS_DIR not initialized");
     let extension: Option<&String> = INPUTS_EXTENSION.get();
     let extension = extension.map(|e| e.as_ref());
 
-    if let Some(last_input) = unsafe { LAST_INPUT.take() } {
+    if let Some(last_input) = LAST_INPUT.get().unwrap().lock().unwrap().take() {
         handle_crash(crashes_dir.as_ref(), extension, last_input.as_slice());
-        save_input(corpus_dir.as_ref(), extension, last_input.as_slice());
     }
 
     std::process::abort();
