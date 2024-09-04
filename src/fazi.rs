@@ -13,7 +13,7 @@ use crate::{
     dictionary::{Dictionary, DictionaryEntry},
     driver::{
         UpdateCoverageResult, CORPUS_METADATA, CRASHES_DIR, INPUTS_DIR, LAST_INPUT,
-        PERFORMING_RECOVERAGE, TESTCASE_COVERAGE,
+        PERFORMING_RECOVERAGE, TESTCASE_COVERAGE, FAZI_STATS_FILE,
     },
     options::RuntimeOptions,
 };
@@ -58,6 +58,16 @@ impl Ord for Input {
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub(crate) struct CorpusMetadata {
     pub ignore_input_hashes: HashSet<Vec<u8>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FaziStats {
+    pub iterations: usize,
+    pub corpus: usize,
+    pub current_mutation_depth: usize,
+    pub current_max_input_len: usize,
+    pub coverage: usize,
+    pub last_update_time: u64,
 }
 
 /// Main Fazi structure that holds our state.
@@ -572,6 +582,7 @@ impl<'a, R: Rng> FaziBuilder<'a, R> {
         fazi.initialize_globals();
         set_corpus_dir(&fazi.options.corpus_dir);
         set_crashes_dir(&fazi.options.crashes_dir);
+        set_fazi_stats_file_path(&fazi.options.stats_file);
 
         fazi.restore_inputs();
 
@@ -588,7 +599,7 @@ impl<'a, R: Rng> FaziBuilder<'a, R> {
 }
 
 pub(crate) fn set_corpus_dir(path: &Path) {
-    println!("{:?}", path);
+    println!("corpus: {:?}", path);
     std::fs::create_dir_all(&path).expect("failed to make corpus dir");
 
     INPUTS_DIR
@@ -597,10 +608,28 @@ pub(crate) fn set_corpus_dir(path: &Path) {
 }
 
 pub(crate) fn set_crashes_dir(path: &Path) {
-    println!("{:?}", path);
+    println!("crashes: {:?}", path);
     std::fs::create_dir_all(&path).expect("failed to make crashes dir");
 
     CRASHES_DIR
         .set(path.to_owned())
         .expect("crashes dir has already been set");
+}
+
+pub(crate) fn set_fazi_stats_file_path(file_path: &Path) {
+    println!("fazi stats path: {:?}", file_path);
+    // Ensure the directory exists where the file will be stored
+    if let Some(parent_dir) = file_path.parent() {
+        fs::create_dir_all(parent_dir).expect("Failed to create directory for fazi stats file");
+    } else {
+        panic!("Invalid file path: no parent directory found");
+    }
+
+    FAZI_STATS_FILE 
+        .set(file_path.to_owned())
+        .expect("fazi stats file path has already been set");
+
+    if !file_path.exists() { 
+        let _ = fs::OpenOptions::new().append(true).create(true).open(file_path);
+    }
 }

@@ -11,7 +11,7 @@ use sha1::Digest;
 use crate::{
     driver::{
         save_input, write_input, COMPARISON_OPERANDS, COV_THREADS, CRASHES_DIR, ENABLE_COUNTERS,
-        FAZI, FAZI_INITIALIZED, INPUTS_DIR, INPUTS_EXTENSION,
+        FAZI, FAZI_INITIALIZED, INPUTS_DIR, FAZI_STATS_FILE, INPUTS_EXTENSION,
     },
     options::RuntimeOptions,
     sancov::reset_pc_guards,
@@ -168,6 +168,23 @@ pub extern "C" fn fazi_set_crashes_dir(dir: *const libc::c_char) {
     fazi.options.crashes_dir = path;
 }
 
+#[no_mangle]
+/// Sets the fazi stats output file
+pub extern "C" fn fazi_set_stats_file(stats: *const libc::c_char) {
+    let mut fazi = FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
+
+    let stats_str = unsafe { CStr::from_ptr(stats) };
+
+    let path: PathBuf = stats_str.to_string_lossy().into_owned().into();
+
+    crate::fazi::set_fazi_stats_file_path(&path);
+
+    fazi.options.stats_file = path;
+}
 #[no_mangle]
 /// Adds binary data to the Fazi dictionary
 pub extern "C" fn fazi_dictionary_add(

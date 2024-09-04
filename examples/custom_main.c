@@ -7,17 +7,17 @@
 #define _GNU_SOURCE
 #include <unistd.h>
 
-#if __GLIBC__ == 2 && __GLIBC_MINOR__ < 30
-#include <sys/syscall.h>
-#define gettid() syscall(SYS_gettid)
-#endif
+// #if __GLIBC__ == 2 && __GLIBC_MINOR__ < 30
+// #include <sys/syscall.h>
+// #define gettid() syscall(SYS_gettid)
+// #endif
 
 // from repo root dir, Test with...
 // mkdir corpus
 // mkdir crashes
 // cargo build --no-default-features
 // export LD_LIBRARY_PATH=target/debug
-// clang examples/custom_main.c -g -fsanitize=fuzzer-no-link -fsanitize=address -l:libfazi.a -fsanitize-coverage=trace-pc -fsanitize-coverage=trace-pc-guard -Ltarget/debug
+// clang examples/custom_main.c -g -fsanitize=fuzzer-no-link -fsanitize=address ./target/debug/libfazi.a -fsanitize-coverage=trace-pc -fsanitize-coverage=trace-pc-guard -Ltarget/debug
 // ./a.out
 
 void fazi_start_iteration(char** data, size_t* size);
@@ -26,26 +26,28 @@ void fazi_initialize();
 void fazi_init_signal_handler();
 void fazi_set_corpus_dir(const char*);
 void fazi_set_crashes_dir(const char*);
+void fazi_set_stats_file(const char*);
 void fazi_add_coverage_thread(uint64_t);
 void fazi_enable_rust_backtrace();
 void fazi_set_max_input_len(int);
-void fazi_set_corpus_dir(const char *);
-void fazi_set_crashes_dir(const char *);
 void fazi_disable_cov_counters();
 void fazi_reset_coverage();
 void fazi_next_recoverage_testcase(char** data, size_t* size);
 void fazi_restore_inputs();
+void fazi_add_coverage_current_thread();
 
-char answer[] = {0xde, 0xad, 0xbe, 0xef};
+unsigned char answer[] = {0xde, 0xad, 0xbe, 0xef};
 
 int no_op_state = 0;
 
-int test_func(const char *data, size_t len) {
-    if (memcmp(answer, data, sizeof(answer)) == 0) {
-        printf("data matched!\n");
+int test_func(const unsigned char *data, size_t len) {
+    // if (memcmp(answer, data, sizeof(answer)) == 0) {
+    // printf("%X %X %X %X\n", data[0], data[1], data[2], data[3]);
+    if (data[0] == answer[0] && data[1] == answer[1] && data[2] == answer[2] && data[3] == answer[3]) {
+        // printf("data matched!\n");
         // artificially crash program
         char *p = 0x13371337;
-        *p = 0xff;
+        // *p = 0xff;
         return 1;
     }
     return 0;
@@ -83,18 +85,19 @@ int main() {
     // Setup fazi globals
     fazi_initialize();
     fazi_init_signal_handler();
-    fazi_restore_inputs();
-    fazi_enable_rust_backtrace();
     fazi_set_corpus_dir("corpus");
     fazi_set_crashes_dir("crashes");
+    fazi_set_stats_file("fazi_stats.json");
+    fazi_restore_inputs();
+    fazi_enable_rust_backtrace();
 
     // allow the main thread to record coverage
-    fazi_add_coverage_thread(gettid());
+    fazi_add_coverage_current_thread();
     fazi_disable_cov_counters();
     fazi_reset_coverage();
 
     int iterations = 0;
-    bool do_recoverage = true;
+    bool do_recoverage = false;
     char* data = 0;
     size_t len = 0;
     start = clock();
@@ -127,7 +130,8 @@ int main() {
             iterations = 0;
         }
 
-        test_func_for_perf_measurement(data, len);
+        // test_func_for_perf_measurement(data, len);
+        test_func(data, len);
         if(!do_recoverage) {
             fazi_end_iteration(false);
         }

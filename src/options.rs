@@ -4,6 +4,7 @@ use clap::{Parser, Subcommand};
 
 const CRASHES_DEFAULT_DIR: &'static str = "./crashes";
 const CORPUS_DEFAULT_DIR: &'static str = "./corpus";
+const FAZI_STATS_FILE: &'static str = "./fazi_stats";
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
@@ -20,6 +21,10 @@ pub struct RuntimeOptions {
     /// Location at which crashing inputs will be saved
     #[clap(long, default_value = CRASHES_DEFAULT_DIR)]
     pub crashes_dir: PathBuf,
+
+    /// Location at which fazi stats will be saved
+    #[clap(long, default_value = FAZI_STATS_FILE)]
+    pub stats_file: PathBuf,
 
     /// The maximum number of times to mutate a single input before moving on
     /// to another.
@@ -65,6 +70,7 @@ impl Default for RuntimeOptions {
         Self {
             corpus_dir: CORPUS_DEFAULT_DIR.into(),
             crashes_dir: CRASHES_DEFAULT_DIR.into(),
+            stats_file: FAZI_STATS_FILE.into(),
             max_mutation_depth: 15,
             len_control: 100,
             min_input_len: 0,

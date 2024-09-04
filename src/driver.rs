@@ -23,7 +23,7 @@ use std::{
         atomic::{AtomicBool, AtomicU8, Ordering},
         Arc, Mutex, OnceLock, RwLock,
     },
-    time::Instant,
+    time::{Instant, SystemTime},
 };
 
 /// Global map of comparison operands from SanCov instrumentation
@@ -53,6 +53,7 @@ pub(crate) static ENABLE_COUNTERS: AtomicBool = AtomicBool::new(true);
 pub(crate) static LAST_INPUT: OnceLock<Mutex<Option<Arc<Vec<u8>>>>> = OnceLock::new();
 pub(crate) static CRASHES_DIR: OnceLock<PathBuf> = OnceLock::new();
 pub(crate) static INPUTS_DIR: OnceLock<PathBuf> = OnceLock::new();
+pub(crate) static FAZI_STATS_FILE: OnceLock<PathBuf> = OnceLock::new();
 pub(crate) static INPUTS_EXTENSION: OnceLock<String> = OnceLock::new();
 pub(crate) static PERFORMING_RECOVERAGE: AtomicBool = AtomicBool::new(false);
 pub(crate) static CORPUS_METADATA: OnceLock<Mutex<CorpusMetadata>> = OnceLock::new();
@@ -180,7 +181,8 @@ impl<R: Rng> Fazi<R> {
     /// Performs tasks necessary immediately after an input has been passed off
     /// to a target. For example, we need to unpoison the allocated but unused
     /// bytes in the current input, update coverage, save the input if new
-    /// coverage has been reached, and perform mutation for the next iteration.
+    /// coverage has been reached, save the fuzzing stats, and perform mutation 
+    /// for the next iteration.
     pub fn end_iteration(&mut self, need_more_data: bool) {
         unpoison_input(self.input.as_ref());
 
@@ -317,7 +319,19 @@ impl<R: Rng> Fazi<R> {
         self.iterations += 1;
 
         if self.last_update_time.elapsed().as_secs() >= STATUS_UPDATE_FREQ_SECS {
-            eprintln!("iter: {}", self.iterations);
+            let fazi_stats = crate::fazi::FaziStats {
+                iterations: self.iterations,
+                corpus: self.corpus.len(),
+                current_mutation_depth: self.current_mutation_depth,
+                current_max_input_len: self.current_max_input_len,
+                coverage: new_coverage,
+                last_update_time: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs(), 
+            };
+
+            eprintln!("stats: {:?}", fazi_stats);
+            std::thread::spawn(move || {
+                write_fazi_stats(&fazi_stats);
+            });
             self.last_update_time = Instant::now();
         }
     }
@@ -464,6 +478,14 @@ pub(crate) fn handle_crash(crashes_dir: &Path, extension: Option<&str>, input: &
             }
         }
     }
+}
+
+
+fn write_fazi_stats(stats: &crate::fazi::FaziStats) {
+    let stats_file: &Path  = FAZI_STATS_FILE.get().as_ref().expect("FAZI_STATS_FILE not initialized"); 
+    let json = serde_json::to_string(&stats).unwrap();
+    println!("saving stats to: {}", stats_file.to_str().unwrap());
+    std::fs::write(&stats_file, json).expect("failed to write fuzzer stats file!");
 }
 
 pub(crate) fn save_input(corpus_dir: &Path, extension: Option<&str>, input: &[u8]) {
