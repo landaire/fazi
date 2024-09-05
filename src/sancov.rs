@@ -185,8 +185,6 @@ extern "C" fn __sanitizer_cov_trace_pc_guard(guard: *mut usize) {
         .lock()
         .expect("failed to lock TESTCASE_COVERAGE")
         .insert(caller_pc);
-    //   fuzzer::WarnAboutDeprecatedInstrumentation(
-    //       "-fsanitize-coverage=trace-pc-guard");
 }
 
 #[no_mangle]
