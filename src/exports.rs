@@ -45,6 +45,18 @@ pub extern "C" fn fazi_init_signal_handler() {
 }
 
 #[no_mangle]
+/// Sets up custom sanitizer report path
+pub extern "C" fn fazi_set_sanitizer_report_path(path: *const libc::c_char) {
+    let fazi = FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
+
+    fazi.setup_sanitizer_report_path(path as *const char);
+}
+
+#[no_mangle]
 /// Sets up Fazi's corpus/crash artifact extension
 pub extern "C" fn fazi_set_artifact_extension(extension: *const libc::c_char) {
     let mut fazi = FAZI

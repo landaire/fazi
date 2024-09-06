@@ -26,6 +26,16 @@ pub(crate) fn libfuzzer_initialize_fn() -> Option<
     }
 }
 
+pub(crate) fn sanitizer_set_report_path_fn(
+) -> Option<unsafe extern "C" fn(*const char) -> std::ffi::c_void> {
+    #[allow(non_snake_case)]
+    {
+        weak!(fn __sanitizer_set_report_path(*const char) -> std::ffi::c_void);
+
+        __sanitizer_set_report_path.get()
+    }
+}
+
 pub(crate) fn sanitizer_set_death_callback_fn(
 ) -> Option<unsafe extern "C" fn(extern "C" fn()) -> std::ffi::c_void> {
     #[allow(non_snake_case)]
