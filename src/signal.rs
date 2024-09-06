@@ -2,6 +2,7 @@ use std::{
     panic::{self},
     path::Path,
     thread,
+    ffi::CStr,
 };
 
 use libc::{SIGABRT, SIGSEGV};
@@ -11,6 +12,7 @@ use signal_hook::iterator::Signals;
 use crate::{
     driver::{handle_crash, save_input, CRASHES_DIR, INPUTS_DIR, INPUTS_EXTENSION, LAST_INPUT},
     weak_imports::sanitizer_set_death_callback_fn,
+    weak_imports::sanitizer_set_report_path_fn,
     Fazi,
 };
 
@@ -50,6 +52,15 @@ impl<R: Rng> Fazi<R> {
 
             death_callback();
         }));
+    }
+
+    pub fn setup_sanitizer_report_path(&self, report_path: *const char) {
+    	if let Some(set_report_path) = sanitizer_set_report_path_fn() {
+            unsafe {
+	        eprintln!("Setting sanitizer report path {}", CStr::from_ptr(report_path as *const i8).to_str().unwrap());
+                set_report_path(report_path);
+            }
+        }
     }
 }
 

@@ -35,6 +35,7 @@ void fazi_reset_coverage();
 void fazi_next_recoverage_testcase(char** data, size_t* size);
 void fazi_restore_inputs();
 void fazi_add_coverage_current_thread();
+void fazi_set_sanitizer_report_path(const char* path);
 
 unsigned char answer[] = {0xde, 0xad, 0xbe, 0xef};
 
@@ -47,7 +48,7 @@ int test_func(const unsigned char *data, size_t len) {
         // printf("data matched!\n");
         // artificially crash program
         char *p = 0x13371337;
-        // *p = 0xff;
+        *p = 0xff;
         return 1;
     }
     return 0;
@@ -87,6 +88,7 @@ int main() {
     fazi_init_signal_handler();
     fazi_set_corpus_dir("corpus");
     fazi_set_crashes_dir("crashes");
+    fazi_set_sanitizer_report_path("crashes/asan_crash");
     fazi_set_stats_file("fazi_stats.json");
     fazi_restore_inputs();
     fazi_enable_rust_backtrace();
