@@ -181,7 +181,7 @@ impl<R: Rng> Fazi<R> {
     /// Performs tasks necessary immediately after an input has been passed off
     /// to a target. For example, we need to unpoison the allocated but unused
     /// bytes in the current input, update coverage, save the input if new
-    /// coverage has been reached, save the fuzzing stats, and perform mutation 
+    /// coverage has been reached, save the fuzzing stats, and perform mutation
     /// for the next iteration.
     pub fn end_iteration(&mut self, need_more_data: bool) {
         unpoison_input(self.input.as_ref());
@@ -263,7 +263,7 @@ impl<R: Rng> Fazi<R> {
                 || self
                     .options
                     .replay_percentage
-                    .map(|p| self.rng.gen_bool(p))
+                    .map(|p| self.rng.random_bool(p))
                     .unwrap_or(false))
                 || need_more_data)
         {
@@ -293,7 +293,7 @@ impl<R: Rng> Fazi<R> {
             Some(self.extend_input())
         } else {
             if let Some(replay_chance) = self.options.replay_percentage {
-                if replay_chance >= 1.0 || self.rng.gen_bool(replay_chance) {
+                if replay_chance >= 1.0 || self.rng.random_bool(replay_chance) {
                     None
                 } else {
                     Some(self.mutate_input())
@@ -325,7 +325,10 @@ impl<R: Rng> Fazi<R> {
                 current_mutation_depth: self.current_mutation_depth,
                 current_max_input_len: self.current_max_input_len,
                 coverage: new_coverage,
-                last_update_time: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs(), 
+                last_update_time: SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
             };
 
             eprintln!("stats: {:?}", fazi_stats);
@@ -480,9 +483,11 @@ pub(crate) fn handle_crash(crashes_dir: &Path, extension: Option<&str>, input: &
     }
 }
 
-
 fn write_fazi_stats(stats: &crate::fazi::FaziStats) {
-    let stats_file: &Path  = FAZI_STATS_FILE.get().as_ref().expect("FAZI_STATS_FILE not initialized"); 
+    let stats_file: &Path = FAZI_STATS_FILE
+        .get()
+        .as_ref()
+        .expect("FAZI_STATS_FILE not initialized");
     let json = serde_json::to_string(&stats).unwrap();
     println!("saving stats to: {}", stats_file.to_str().unwrap());
     std::fs::write(&stats_file, json).expect("failed to write fuzzer stats file!");

@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use rand::{
     prelude::{IteratorRandom, SliceRandom},
+    seq::IndexedRandom,
     Rng,
 };
-
 
 use crate::dictionary::DictionaryEntry;
 use crate::{driver::COMPARISON_OPERANDS, Fazi};
@@ -52,9 +52,9 @@ impl MutationStrategy {
             ModifySize,
             Any,
         }
-        let _mutation_group = if rng.gen_bool(0.90) {
+        let _mutation_group = if rng.random_bool(0.90) {
             MutationGroup::ChangeData
-        } else if rng.gen() {
+        } else if rng.random() {
             MutationGroup::ModifySize
         } else {
             MutationGroup::Any
@@ -129,7 +129,7 @@ impl<R: Rng> Fazi<R> {
             }
         }
         // For small inputs we should give a small % to just directly use dictionary values
-        let mut mutation_strategy = if self.input.len() < 1024 && self.rng.gen_bool(0.30) {
+        let mut mutation_strategy = if self.input.len() < 1024 && self.rng.random_bool(0.30) {
             MutationStrategy::UseCmpValue
         } else {
             MutationStrategy::random(&mut self.rng)
@@ -181,8 +181,8 @@ impl<R: Rng> Fazi<R> {
             return Err(());
         }
 
-        let start_index: usize = self.rng.gen_range(0..self.input.len());
-        let mut end_index: usize = self.rng.gen_range(start_index..self.input.len());
+        let start_index: usize = self.rng.random_range(0..self.input.len());
+        let mut end_index: usize = self.rng.random_range(start_index..self.input.len());
         if self.input.len() - (end_index - start_index) < self.min_input_size.unwrap_or(0) {
             // the selected range would make this testcase smaller than our minimum size.
             end_index = start_index + (self.input.len() - self.min_input_size.unwrap());
@@ -213,8 +213,8 @@ impl<R: Rng> Fazi<R> {
             return Err(());
         }
 
-        let index: usize = self.rng.gen_range(0..=self.input.len());
-        let byte = self.rng.gen();
+        let index: usize = self.rng.random_range(0..=self.input.len());
+        let byte = self.rng.random();
 
         let input = self.input_mut();
 
@@ -237,7 +237,7 @@ impl<R: Rng> Fazi<R> {
         let index: usize = if self.input.is_empty() {
             0
         } else {
-            self.rng.gen_range(0..=self.input.len())
+            self.rng.random_range(0..=self.input.len())
         };
 
         let max_count = if ignore_max {
@@ -250,16 +250,16 @@ impl<R: Rng> Fazi<R> {
             if self.input.len() < min_size {
                 min_size - self.input.len()
             } else {
-                self.rng.gen_range(2..max_count)
+                self.rng.random_range(2..max_count)
             }
         } else {
-            self.rng.gen_range(2..max_count)
+            self.rng.random_range(2..max_count)
         };
 
-        let byte_iter: Box<dyn Iterator<Item = u8>> = if self.rng.gen() {
-            Box::new(std::iter::repeat(self.rng.gen()).take(count))
+        let byte_iter: Box<dyn Iterator<Item = u8>> = if self.rng.random() {
+            Box::new(std::iter::repeat(self.rng.random()).take(count))
         } else {
-            Box::new(std::iter::from_fn(|| Some(self.rng.gen())).take(count))
+            Box::new(std::iter::from_fn(|| Some(self.rng.random())).take(count))
         };
 
         let input = Arc::make_mut(&mut self.input);
@@ -308,16 +308,16 @@ impl<R: Rng> Fazi<R> {
                 {
                     let input_len = self.input.len();
                     let ty_size = std::mem::size_of::<$ty>();
-                    let is_big_endian_input = self.rng.gen();
-                    let offset = if self.input.len() > offset && self.rng.gen() {
+                    let is_big_endian_input = self.rng.random();
+                    let offset = if self.input.len() > offset && self.rng.random() {
                         offset
                     } else if self.input.is_empty() {
                         0
                     } else {
-                        self.rng.gen_range(0..self.input.len())
+                        self.rng.random_range(0..self.input.len())
                     };
 
-                    let insert_byte = self.rng.gen();
+                    let insert_byte = self.rng.random();
                     let input = self.input_mut();
                     let new_value = if is_big_endian_input {
                         value.to_be_bytes()
@@ -360,8 +360,8 @@ impl<R: Rng> Fazi<R> {
             return Err(());
         }
 
-        let index: usize = self.rng.gen_range(0..self.input.len());
-        let byte = self.rng.gen();
+        let index: usize = self.rng.random_range(0..self.input.len());
+        let byte = self.rng.random();
 
         let input = self.input_mut();
         input[index] = byte;
@@ -375,8 +375,8 @@ impl<R: Rng> Fazi<R> {
             return Err(());
         }
 
-        let byte_index: usize = self.rng.gen_range(0..self.input.len());
-        let bit_index: usize = self.rng.gen_range(0..8);
+        let byte_index: usize = self.rng.random_range(0..self.input.len());
+        let bit_index: usize = self.rng.random_range(0..8);
 
         let input = self.input_mut();
         input[byte_index] = input[byte_index] ^ (1 << bit_index);
@@ -392,9 +392,9 @@ impl<R: Rng> Fazi<R> {
             return Err(());
         }
 
-        let index: usize = self.rng.gen_range(0..self.input.len());
+        let index: usize = self.rng.random_range(0..self.input.len());
         let max_count = std::cmp::min(self.input.len() - index, 8);
-        let count: usize = self.rng.gen_range(0..=max_count);
+        let count: usize = self.rng.random_range(0..=max_count);
 
         let input = Arc::make_mut(&mut self.input);
         let byte_range = &mut input[index..index + count];
@@ -417,7 +417,7 @@ impl<R: Rng> Fazi<R> {
             .iter()
             .position(|&byte| byte >= b'0' && byte <= b'9')
         {
-            let new_int = self.rng.gen_range(b'0'..=b'9');
+            let new_int = self.rng.random_range(b'0'..=b'9');
             let input = self.input_mut();
             input[position] = new_int;
         } else {
@@ -463,7 +463,7 @@ impl<R: Rng> Fazi<R> {
             IntegerWidth::U32,
             IntegerWidth::U64,
         ];
-        let mut choice = if self.rng.gen() {
+        let mut choice = if self.rng.random() {
             IntegerWidth::Binary
         } else {
             choices
@@ -479,7 +479,7 @@ impl<R: Rng> Fazi<R> {
             .lock()
             .expect("failed to lock CONSTANTS");
 
-        let use_const_dynamic_pair = self.rng.gen_bool(0.90);
+        let use_const_dynamic_pair = self.rng.random_bool(0.90);
 
         macro_rules! change_int {
             ($ty:ty, $covmap:ident, $dictmap:ident, $next_choice:expr) => {
@@ -510,7 +510,7 @@ impl<R: Rng> Fazi<R> {
 
                 let cmp_pair = cmp_pair.unwrap();
 
-                let is_big_endian_input = self.rng.gen();
+                let is_big_endian_input = self.rng.random();
                 // Randomly select an index from the input to start our search
                 // at.
                 let index_sampler =
@@ -631,14 +631,14 @@ impl<R: Rng> Fazi<R> {
                     if let Some(random_position_bytes) = random_position_bytes {
                         // If we can't overwrite the data, we always insert
                         let should_insert =
-                            self.input.len() < random_position_bytes.len() || self.rng.gen();
+                            self.input.len() < random_position_bytes.len() || self.rng.random();
                         let upper_bound = if should_insert {
                             self.input.len()
                         } else {
                             self.input.len() - random_position_bytes.len()
                         };
 
-                        let idx = self.rng.gen_range(0..upper_bound);
+                        let idx = self.rng.random_range(0..upper_bound);
                         let input = self.input_mut();
                         if should_insert {
                             for &b in random_position_bytes.iter().rev() {
@@ -652,7 +652,7 @@ impl<R: Rng> Fazi<R> {
                         return Ok(());
                     }
 
-                    let (bytes_in_input, bytes_it_should_be) = if self.rng.gen_bool(0.90) {
+                    let (bytes_in_input, bytes_it_should_be) = if self.rng.random_bool(0.90) {
                         (
                             binary_compare_target.0.as_slice(),
                             binary_compare_target.1.as_slice(),
@@ -681,7 +681,7 @@ impl<R: Rng> Fazi<R> {
                     }
 
                     if let Some((idx, bytes_in_input, new_bytes)) = found_match {
-                        let insert_at_start = self.rng.gen();
+                        let insert_at_start = self.rng.random();
                         let input = self.input_mut();
 
                         if insert_at_start {
@@ -749,7 +749,7 @@ impl<R: Rng> Fazi<R> {
             Replace,
         }
 
-        let mut index = self.rng.gen_range(0..self.input.len());
+        let mut index = self.rng.random_range(0..self.input.len());
 
         // We loop until we find an integer width that fits the size of the input
         let integer_width_choices = [
@@ -795,7 +795,7 @@ impl<R: Rng> Fazi<R> {
                 // Treat this as a different endian from the host endian
                 let input = Arc::make_mut(&mut self.input);
                 let input_range = &mut input[index..index + BIT_WIDTH];
-                let is_different_endianness = self.rng.gen();
+                let is_different_endianness = self.rng.random();
 
                 let mut new_bytes = [0u8; BIT_WIDTH];
 
@@ -819,7 +819,7 @@ impl<R: Rng> Fazi<R> {
                                     .expect("failed to convert input slice to an array"),
                             )
                         };
-                        let add: $ty = self.rng.gen_range(0..10);
+                        let add: $ty = self.rng.random_range(0..10);
                         if add == 0 {
                             // negate this number
                             input_as_int = (!input_as_int).wrapping_add(1);
@@ -834,7 +834,7 @@ impl<R: Rng> Fazi<R> {
                         new_bytes.copy_from_slice(input_as_int.to_ne_bytes().as_slice());
                     }
                     SubStrategy::Replace => {
-                        new_bytes = self.rng.gen();
+                        new_bytes = self.rng.random();
                     }
                 }
 
@@ -850,7 +850,7 @@ impl<R: Rng> Fazi<R> {
         loop {
             match integer_width_choice {
                 IntegerWidth::U8 => {
-                    let add: u8 = self.rng.gen_range(0..10);
+                    let add: u8 = self.rng.random_range(0..10);
                     let input = self.input_mut();
                     if add == 0 {
                         input[index] = (!input[index]).wrapping_add(1);
@@ -931,9 +931,9 @@ fn copy_helper(
         return Err(());
     }
 
-    let copy_from = rng.gen_range(0..original.len());
-    let mut copy_len = rng.gen_range(1..=(original.len() - copy_from));
-    let copy_to = rng.gen_range(0..=target.len());
+    let copy_from = rng.random_range(0..original.len());
+    let mut copy_len = rng.random_range(1..=(original.len() - copy_from));
+    let copy_to = rng.random_range(0..=target.len());
 
     if target.len() + copy_len > max_mutation_len {
         let delta = max_mutation_len.saturating_sub(target.len());

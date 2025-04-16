@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use rand::{prelude::SliceRandom, Rng};
+use rand::{prelude::SliceRandom, seq::IndexedRandom, Rng};
 
 #[derive(Debug, Default)]
 pub(crate) struct Dictionary {
@@ -85,7 +85,7 @@ pub(crate) fn rand_interesting_number(rng: &mut impl Rng, width: usize, output: 
                 .as_slice(),
         ),
         4 => {
-            let bytes = if rng.gen() {
+            let bytes = if rng.random() {
                 INTERESTING_NUMBERS_U32.choose(rng).unwrap().to_ne_bytes()
             } else {
                 INTERESTING_NUMBERS_F32.choose(rng).unwrap().to_ne_bytes()
@@ -93,7 +93,7 @@ pub(crate) fn rand_interesting_number(rng: &mut impl Rng, width: usize, output: 
             output.copy_from_slice(bytes.as_slice());
         }
         8 => {
-            let bytes = if rng.gen() {
+            let bytes = if rng.random() {
                 INTERESTING_NUMBERS_U64.choose(rng).unwrap().to_ne_bytes()
             } else {
                 INTERESTING_NUMBERS_F64.choose(rng).unwrap().to_ne_bytes()

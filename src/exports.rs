@@ -4,7 +4,7 @@ use std::{
     sync::{atomic::Ordering, Arc, Mutex},
 };
 
-use clap::StructOpt;
+use clap::Parser;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use sha1::Digest;
 
@@ -401,14 +401,14 @@ pub extern "C" fn fazi_set_max_mutation_depth(depth: usize) {
 }
 
 #[no_mangle]
-pub extern "C" fn fazi_gen_bool_with_probability(probability: f64) -> bool {
+pub extern "C" fn fazi_random_bool_with_probability(probability: f64) -> bool {
     let mut fazi = FAZI
         .get()
         .expect("FAZI not initialized")
         .lock()
         .expect("could not lock FAZI");
 
-    fazi.rng_mut().gen_bool(probability)
+    fazi.rng_mut().random_bool(probability)
 }
 
 #[no_mangle]

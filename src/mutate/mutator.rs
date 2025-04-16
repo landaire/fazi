@@ -1,10 +1,9 @@
 use std::fmt::Debug;
 
-
 #[cfg(feature = "protobuf")]
 use protobuf::EnumOrUnknown;
 
-use rand::prelude::{SliceRandom};
+use rand::seq::{IndexedRandom, SliceRandom};
 use rand::Rng;
 
 use crate::driver::COMPARISON_OPERANDS;
@@ -41,10 +40,10 @@ fn generate_char<R: Rng>(rng: &mut R) -> char {
         .clone();
 
     match choice {
-        CharMode::Ascii => rng.gen_range(0..=0x7F) as u8 as char,
+        CharMode::Ascii => rng.random_range(0..=0x7F) as u8 as char,
         CharMode::RandLowerSection => {
             loop {
-                if let Some(c) = char::from_u32(rng.gen_range(0..0x10000)) {
+                if let Some(c) = char::from_u32(rng.random_range(0..0x10000)) {
                     return c;
                 }
 
@@ -126,11 +125,11 @@ fn generate_char<R: Rng>(rng: &mut R) -> char {
         }
         CharMode::TrickyUnicode2 => {
             // Tricky unicode, part 2
-            char::from_u32(rng.gen_range(0x2000..0x2070)).unwrap()
+            char::from_u32(rng.random_range(0x2000..0x2070)).unwrap()
         }
         CharMode::Random => {
             // Completely arbitrary characters
-            rng.gen()
+            rng.random()
         }
     }
 }
@@ -166,7 +165,7 @@ impl Mutable for String {
         }
 
         // Maybe shuffle the string
-        if fazi.rng.gen_bool(0.5) {
+        if fazi.rng.random_bool(0.5) {
             let mut chars: Vec<char> = self.chars().collect();
             chars.shuffle(&mut fazi.rng);
 
@@ -175,8 +174,8 @@ impl Mutable for String {
         }
 
         // Give a low chance to append a new char
-        if self.is_empty() || fazi.rng.gen_bool(0.10) {
-            let count = fazi.rng.gen_range(1..=10);
+        if self.is_empty() || fazi.rng.random_bool(0.10) {
+            let count = fazi.rng.random_range(1..=10);
             for _ in 0..count {
                 self.push(generate_char(&mut fazi.rng));
             }
@@ -185,16 +184,16 @@ impl Mutable for String {
 
         if !self.is_empty() {
             // Give a low chance to remove an item
-            if fazi.rng.gen_bool(0.10) {
+            if fazi.rng.random_bool(0.10) {
                 let mut chars: Vec<char> = self.chars().collect();
-                chars.remove(fazi.rng.gen_range(0..chars.len()));
+                chars.remove(fazi.rng.random_range(0..chars.len()));
 
                 *self = chars.into_iter().collect();
             } else {
                 let mut chars: Vec<char> = self.chars().collect();
 
                 // Randomly sample indexes to iterate over
-                let count = fazi.rng.gen_range(0..=chars.len());
+                let count = fazi.rng.random_range(0..=chars.len());
                 let index_sampler =
                     rand::seq::index::sample(&mut fazi.rng, chars.len(), count).into_iter();
 
@@ -219,14 +218,14 @@ where
         }
 
         // Maybe shuffle the elements?
-        if fazi.rng.gen_bool(0.5) {
+        if fazi.rng.random_bool(0.5) {
             self.shuffle(&mut fazi.rng);
             return;
         }
 
         // Give a low chance to append a new element
-        if self.is_empty() || fazi.rng.gen_bool(0.10) {
-            let count = fazi.rng.gen_range(1..=10);
+        if self.is_empty() || fazi.rng.random_bool(0.10) {
+            let count = fazi.rng.random_range(1..=10);
             for _ in 0..count {
                 let mut new_item = T::default();
                 new_item.mutate(fazi);
@@ -238,11 +237,11 @@ where
 
         if !self.is_empty() {
             // Give a low chance to remove an item
-            if fazi.rng.gen_bool(0.10) {
-                self.remove(fazi.rng.gen_range(0..self.len()));
+            if fazi.rng.random_bool(0.10) {
+                self.remove(fazi.rng.random_range(0..self.len()));
             } else {
                 // Randomly sample indexes to iterate over
-                let count = fazi.rng.gen_range(0..=self.len());
+                let count = fazi.rng.random_range(0..=self.len());
                 let index_sampler =
                     rand::seq::index::sample(&mut fazi.rng, self.len(), count).into_iter();
                 // Iterate these items in-place
@@ -262,14 +261,14 @@ where
     fn mutate<R: Rng>(&mut self, fazi: &mut Fazi<R>) {
         match self {
             Some(value) => {
-                if fazi.rng.gen_bool(0.10) {
+                if fazi.rng.random_bool(0.10) {
                     *self = None;
                 } else {
                     value.mutate(fazi);
                 }
             }
             None => {
-                if fazi.rng.gen::<bool>() {
+                if fazi.rng.random::<bool>() {
                     let mut new_value = T::default();
                     new_value.mutate(fazi);
                     *self = Some(new_value)
@@ -286,7 +285,7 @@ impl Mutable for bool {
         if guard.is_none() {
             return;
         }
-        *self = fazi.rng.gen();
+        *self = fazi.rng.random();
     }
 }
 
@@ -390,7 +389,7 @@ macro_rules! mutate_fn {
                 .lock()
                 .expect("failed to lock CONSTANTS");
 
-            let use_const_dynamic_pair = self.rng.gen_bool(0.90);
+            let use_const_dynamic_pair = self.rng.random_bool(0.90);
 
             // Try to find a match in the coverage map that correlates the current
             // value to something we compared
@@ -424,11 +423,11 @@ macro_rules! mutate_fn {
                         value
                     }
                     None => {
-                        return self.rng.gen();
+                        return self.rng.random();
                     }
                 };
 
-            let is_big_endian_input = self.rng.gen();
+            let is_big_endian_input = self.rng.random();
 
             let new_value = if is_big_endian_input {
                 // swap endianness

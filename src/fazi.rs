@@ -12,8 +12,8 @@ use std::{
 use crate::{
     dictionary::{Dictionary, DictionaryEntry},
     driver::{
-        UpdateCoverageResult, CORPUS_METADATA, CRASHES_DIR, INPUTS_DIR, LAST_INPUT,
-        PERFORMING_RECOVERAGE, TESTCASE_COVERAGE, FAZI_STATS_FILE,
+        UpdateCoverageResult, CORPUS_METADATA, CRASHES_DIR, FAZI_STATS_FILE, INPUTS_DIR,
+        LAST_INPUT, PERFORMING_RECOVERAGE, TESTCASE_COVERAGE,
     },
     options::RuntimeOptions,
 };
@@ -137,7 +137,7 @@ impl<R: Rng + std::fmt::Debug> std::fmt::Debug for Fazi<R> {
 impl Default for Fazi<StdRng> {
     fn default() -> Self {
         Fazi {
-            rng: StdRng::from_entropy(),
+            rng: StdRng::from_os_rng(),
             input: Default::default(),
             dictionary: Default::default(),
             last_dictionary_input: None,
@@ -202,11 +202,11 @@ impl MutationGuard {
         }
 
         let mutate_this_field = if is_primitive_type {
-            fazi.rng.gen::<bool>()
+            fazi.rng.random::<bool>()
         } else {
-            fazi.rng.gen_bool(0.10)
+            fazi.rng.random_bool(0.10)
         };
-        let stop_mutating = if fazi.rng.gen_bool(0.01) {
+        let stop_mutating = if fazi.rng.random_bool(0.01) {
             STOP_MUTATING.store(true, Ordering::SeqCst);
             true
         } else if mutate_this_field {
@@ -625,11 +625,14 @@ pub(crate) fn set_fazi_stats_file_path(file_path: &Path) {
         panic!("Invalid file path: no parent directory found");
     }
 
-    FAZI_STATS_FILE 
+    FAZI_STATS_FILE
         .set(file_path.to_owned())
         .expect("fazi stats file path has already been set");
 
-    if !file_path.exists() { 
-        let _ = fs::OpenOptions::new().append(true).create(true).open(file_path);
+    if !file_path.exists() {
+        let _ = fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(file_path);
     }
 }
