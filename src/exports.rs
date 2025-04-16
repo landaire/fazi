@@ -5,13 +5,13 @@ use std::{
 };
 
 use clap::StructOpt;
-use rand::Rng;
+use rand::{rngs::StdRng, Rng, SeedableRng};
 use sha1::Digest;
 
 use crate::{
     driver::{
         save_input, write_input, COMPARISON_OPERANDS, COV_THREADS, CRASHES_DIR, ENABLE_COUNTERS,
-        FAZI, FAZI_INITIALIZED, INPUTS_DIR, FAZI_STATS_FILE, INPUTS_EXTENSION,
+        FAZI, FAZI_INITIALIZED, FAZI_STATS_FILE, INPUTS_DIR, INPUTS_EXTENSION,
     },
     options::RuntimeOptions,
     sancov::reset_pc_guards,
@@ -457,4 +457,15 @@ pub extern "C" fn fazi_write_last_message(data: *const u8, len: usize) {
     } else {
         eprintln!("fazi_write_last_message: INPUTS_DIR not initialized");
     }
+}
+
+#[no_mangle]
+pub extern "C" fn fazi_set_seed(seed: u64) {
+    let mut fazi = FAZI
+        .get()
+        .expect("FAZI not initialized")
+        .lock()
+        .expect("could not lock FAZI");
+
+    *fazi.rng_mut() = StdRng::seed_from_u64(seed);
 }
