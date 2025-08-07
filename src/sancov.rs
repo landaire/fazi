@@ -162,7 +162,7 @@ fn should_record_coverage() -> bool {
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_cov_trace_pc_guard(guard: *mut usize) {
+extern "C" fn __sanitizer_cov_trace_pc_guard(guard: *mut u32) {
     // This callback is executed everywhere in code instrumented with `-fsanitize-coverage=trace-pc-guard`
     // Do quick checks first for optimization
     unsafe {
