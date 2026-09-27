@@ -122,9 +122,17 @@ impl<R: Rng> Fazi<R> {
 
     /// Perform a random mutation strategy on the current input
     pub(crate) fn mutate_input(&mut self) -> MutationStrategy {
+        // When a structured callback is registered, use it for most mutations
+        // but fall through to the byte mutators the rest of the time, so the
+        // input is also exercised as an opaque blob (and the redqueen and
+        // dictionary strategies still run).
         #[cfg(feature = "structured_fuzzing")]
         {
-            if self.mutate_structured_fuzzing_input() {
+            const STRUCTURED_FUZZING_PROBABILITY: f64 = 0.6;
+            if self.structured_fuzzing_mutate_callback.is_some()
+                && self.rng.random_bool(STRUCTURED_FUZZING_PROBABILITY)
+                && self.mutate_structured_fuzzing_input()
+            {
                 return MutationStrategy::StructuredFuzzing;
             }
         }

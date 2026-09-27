@@ -35,7 +35,9 @@ pub use rand;
 use rand::rngs::StdRng;
 
 #[cfg(feature = "structured_fuzzing")]
-pub fn set_structured_fuzzing_mutate_callback(callback: fn(&[u8], &mut Fazi<StdRng>) -> Vec<u8>) {
+pub fn set_structured_fuzzing_mutate_callback(
+    callback: fn(&[u8], &mut Fazi<StdRng>) -> Result<Vec<u8>, ()>,
+) {
     let mut fazi = crate::driver::FAZI
         .get()
         .expect("FAZI not initialized")

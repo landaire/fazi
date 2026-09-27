@@ -103,8 +103,12 @@ pub struct Fazi<R: Rng> {
     pub(crate) last_corpus_update_run: usize,
     /// The last item that was run through recoverage
     pub(crate) last_recoverage_input: Option<Arc<Vec<u8>>>,
+    /// Hybrid fuzzing hook. `Ok` bytes replace the input as a structured
+    /// mutation; `Err` means the callback declined this input, and Fazi
+    /// mutates it as an opaque byte blob instead.
     #[cfg(feature = "structured_fuzzing")]
-    pub(crate) structured_fuzzing_mutate_callback: Option<fn(&[u8], &mut Fazi<R>) -> Vec<u8>>,
+    pub(crate) structured_fuzzing_mutate_callback:
+        Option<fn(&[u8], &mut Fazi<R>) -> Result<Vec<u8>, ()>>,
     /// Last point in time when we gave a fuzzer status update
     pub(crate) last_update_time: Instant,
     pub(crate) backtrace_set: HashSet<[u8; 20]>,
