@@ -10,8 +10,8 @@ use sha1::Digest;
 
 use crate::{
     driver::{
-        save_input, write_input, COMPARISON_OPERANDS, COV_THREADS, CRASHES_DIR, ENABLE_COUNTERS,
-        FAZI, FAZI_INITIALIZED, FAZI_STATS_FILE, INPUTS_DIR, INPUTS_EXTENSION,
+        save_input, write_input, COMPARISON_OPERANDS, COV_THREADS, COV_THREADS_EMPTY, CRASHES_DIR,
+        ENABLE_COUNTERS, FAZI, FAZI_INITIALIZED, FAZI_STATS_FILE, INPUTS_DIR, INPUTS_EXTENSION,
     },
     options::RuntimeOptions,
     sancov::reset_pc_guards,
@@ -340,6 +340,7 @@ pub extern "C" fn fazi_add_coverage_thread(thread_id: usize) {
         .write()
         .expect("Failed to lock COV_THREADS")
         .insert(thread_id);
+    COV_THREADS_EMPTY.store(false, Ordering::Relaxed);
 }
 
 #[no_mangle]
@@ -351,6 +352,7 @@ pub extern "C" fn fazi_add_coverage_current_thread() {
         .write()
         .expect("Failed to lock COV_THREADS")
         .insert(thread_id::get());
+    COV_THREADS_EMPTY.store(false, Ordering::Relaxed);
 }
 
 #[no_mangle]
@@ -362,6 +364,7 @@ pub extern "C" fn fazi_clear_coverage_threads() {
         .write()
         .expect("Failed to lock COV_THREADS")
         .clear();
+    COV_THREADS_EMPTY.store(true, Ordering::Relaxed);
 }
 
 #[no_mangle]
