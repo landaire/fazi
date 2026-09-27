@@ -6,7 +6,8 @@ use std::{
 
 use crate::{
     driver::{
-        COMPARISON_OPERANDS, COV_THREADS, FAZI_INITIALIZED, PC_INFO, TESTCASE_COVERAGE, U8_COUNTERS,
+        COMPARISON_OPERANDS, COV_THREADS, COV_THREADS_EMPTY, FAZI_INITIALIZED, PC_INFO,
+        TESTCASE_COVERAGE, U8_COUNTERS,
     },
     exports::fazi_initialize,
 };
@@ -151,14 +152,36 @@ fn should_record_coverage() -> bool {
     if !FAZI_INITIALIZED.load(Ordering::Relaxed) {
         return false;
     }
+    // Common case: no thread restriction, so every thread records. Avoid the
+    // lock on the hot path; this callback fires on every instrumented edge.
+    if COV_THREADS_EMPTY.load(Ordering::Relaxed) {
+        return true;
+    }
     let cov_threads = COV_THREADS
         .get()
         .expect("Failed to get COV_THREADS")
         .read()
         .expect("Failed to lock COV_THREADS");
 
-    // Empty set will allow all threads
     cov_threads.is_empty() || cov_threads.contains(&thread_id::get())
+}
+
+/// Records one covered PC. Uses `try_lock` so a re-entrant hit (instrumented
+/// code running while this thread already holds the lock) cannot deadlock;
+/// the hit is dropped instead. Returns whether it was recorded.
+#[inline]
+fn record_pc(caller_pc: usize) -> bool {
+    match TESTCASE_COVERAGE
+        .get()
+        .expect("failed to get TESTCASE_COVERAGE")
+        .try_lock()
+    {
+        Ok(mut coverage) => {
+            coverage.insert(caller_pc);
+            true
+        }
+        Err(_) => false,
+    }
 }
 
 #[no_mangle]
@@ -170,21 +193,20 @@ extern "C" fn __sanitizer_cov_trace_pc_guard(guard: *mut u32) {
         if std::intrinsics::likely(*guard == 0) {
             return; // Duplicate the guard check.
         }
-
-        // short circuit future executions of this callback to not slow down app
-        *guard = 0;
     }
 
     if !should_record_coverage() {
+        // A non-recording thread must not consume the guard, or a recording
+        // thread would never see this edge.
         return;
     }
-    let caller_pc = caller_address!();
-    TESTCASE_COVERAGE
-        .get()
-        .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE")
-        .insert(caller_pc);
+    // Consume the guard only once the edge is recorded, so a lost record
+    // (try_lock contention) is retried on the next hit rather than dropped.
+    if record_pc(caller_address!()) {
+        unsafe {
+            *guard = 0;
+        }
+    }
 }
 
 #[no_mangle]
@@ -192,13 +214,7 @@ extern "C" fn __sanitizer_cov_trace_pc() {
     if !should_record_coverage() {
         return;
     }
-    let caller_pc = caller_address!();
-    TESTCASE_COVERAGE
-        .get()
-        .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE")
-        .insert(caller_pc);
+    record_pc(caller_address!());
     //   fuzzer::WarnAboutDeprecatedInstrumentation("-fsanitize-coverage=trace-pc");
 }
 
@@ -302,11 +318,14 @@ extern "C" fn __sanitizer_cov_trace_pc_indir(callee: *const std::ffi::c_void) {
     }
 
     let caller_pc = caller_address!();
-    let mut coverage = TESTCASE_COVERAGE
+    let mut coverage = match TESTCASE_COVERAGE
         .get()
         .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE");
+        .try_lock()
+    {
+        Ok(coverage) => coverage,
+        Err(_) => return,
+    };
 
     let mut s = DefaultHasher::new();
     s.write_usize(callee as usize);
@@ -386,13 +405,7 @@ extern "C" fn __sanitizer_cov_trace_cmp8(arg1: u64, arg2: u64) {
     }
     handle_cmp!(CmpOperand::Dynamic(arg1), CmpOperand::Dynamic(arg2), u64);
 
-    let caller_pc = caller_address!();
-    TESTCASE_COVERAGE
-        .get()
-        .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE")
-        .insert(caller_pc);
+    record_pc(caller_address!());
 
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Arg1, Arg2);
@@ -408,13 +421,7 @@ extern "C" fn __sanitizer_cov_trace_const_cmp8(arg1: u64, arg2: u64) {
     }
     handle_cmp!(CmpOperand::Constant(arg1), CmpOperand::Dynamic(arg2), u64);
 
-    let caller_pc = caller_address!();
-    TESTCASE_COVERAGE
-        .get()
-        .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE")
-        .insert(caller_pc);
+    record_pc(caller_address!());
 
     // todo!()
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
@@ -428,13 +435,7 @@ extern "C" fn __sanitizer_cov_trace_cmp4(arg1: u32, arg2: u32) {
     }
     handle_cmp!(CmpOperand::Dynamic(arg1), CmpOperand::Dynamic(arg2), u32);
 
-    let caller_pc = caller_address!();
-    TESTCASE_COVERAGE
-        .get()
-        .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE")
-        .insert(caller_pc);
+    record_pc(caller_address!());
 
     // todo!()
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
@@ -448,13 +449,7 @@ extern "C" fn __sanitizer_cov_trace_const_cmp4(arg1: u32, arg2: u32) {
     }
     handle_cmp!(CmpOperand::Constant(arg1), CmpOperand::Dynamic(arg2), u32);
 
-    let caller_pc = caller_address!();
-    TESTCASE_COVERAGE
-        .get()
-        .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE")
-        .insert(caller_pc);
+    record_pc(caller_address!());
 
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Arg1, Arg2);
@@ -467,13 +462,7 @@ extern "C" fn __sanitizer_cov_trace_cmp2(arg1: u16, arg2: u16) {
     }
     handle_cmp!(CmpOperand::Dynamic(arg1), CmpOperand::Dynamic(arg2), u16);
 
-    let caller_pc = caller_address!();
-    TESTCASE_COVERAGE
-        .get()
-        .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE")
-        .insert(caller_pc);
+    record_pc(caller_address!());
 
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Arg1, Arg2);
@@ -486,13 +475,7 @@ extern "C" fn __sanitizer_cov_trace_const_cmp2(arg1: u16, arg2: u16) {
     }
     handle_cmp!(CmpOperand::Constant(arg1), CmpOperand::Dynamic(arg2), u16);
 
-    let caller_pc = caller_address!();
-    TESTCASE_COVERAGE
-        .get()
-        .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE")
-        .insert(caller_pc);
+    record_pc(caller_address!());
 
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Arg1, Arg2);
@@ -505,13 +488,7 @@ extern "C" fn __sanitizer_cov_trace_cmp1(arg1: u8, arg2: u8) {
     }
     handle_cmp!(CmpOperand::Dynamic(arg1), CmpOperand::Dynamic(arg2), u8);
 
-    let caller_pc = caller_address!();
-    TESTCASE_COVERAGE
-        .get()
-        .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE")
-        .insert(caller_pc);
+    record_pc(caller_address!());
 
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Arg1, Arg2);
@@ -524,61 +501,49 @@ extern "C" fn __sanitizer_cov_trace_const_cmp1(arg1: u8, arg2: u8) {
     }
     handle_cmp!(CmpOperand::Constant(arg1), CmpOperand::Dynamic(arg2), u8);
 
-    let caller_pc = caller_address!();
-    TESTCASE_COVERAGE
-        .get()
-        .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE")
-        .insert(caller_pc);
+    record_pc(caller_address!());
 
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Arg1, Arg2);
 }
 
 #[no_mangle]
-extern "C" fn __sanitizer_cov_trace_switch(_val: u64, _cases: *const u64) {
-    //   uint64_t N = Cases[0];
-    //   uint64_t ValSizeInBits = Cases[1];
-    //   uint64_t *Vals = Cases + 2;
-    //   // Skip the most common and the most boring case: all switch values are small.
-    //   // We may want to skip this at compile-time, but it will make the
-    //   // instrumentation less general.
-    //   if (Vals[N - 1]  < 256)
-    //     return;
-    //   // Also skip small inputs values, they won't give good signal.
-    //   if (Val < 256)
-    //     return;
-    //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
-    //   size_t i;
-    //   uint64_t Smaller = 0;
-    //   uint64_t Larger = ~(uint64_t)0;
-    //   // Find two switch values such that Smaller < Val < Larger.
-    //   // Use 0 and 0xfff..f as the defaults.
-    //   for (i = 0; i < N; i++) {
-    //     if (Val < Vals[i]) {
-    //       Larger = Vals[i];
-    //       break;
-    //     }
-    //     if (Val > Vals[i]) Smaller = Vals[i];
-    //   }
+extern "C" fn __sanitizer_cov_trace_switch(val: u64, cases: *const u64) {
+    if !should_record_coverage() {
+        return;
+    }
+    // cases layout: [count, value_size_bits, sorted case values...].
+    let count = unsafe { *cases } as usize;
+    if count == 0 {
+        return;
+    }
+    let vals = unsafe { std::slice::from_raw_parts(cases.add(2), count) };
 
-    //   // Apply HandleCmp to {Val,Smaller} and {Val, Larger},
-    //   // use i as the PC modifier for HandleCmp.
-    //   if (ValSizeInBits == 16) {
-    //     fuzzer::TPC.HandleCmp(PC + 2 * i, static_cast<uint16_t>(Val),
-    //                           (uint16_t)(Smaller));
-    //     fuzzer::TPC.HandleCmp(PC + 2 * i + 1, static_cast<uint16_t>(Val),
-    //                           (uint16_t)(Larger));
-    //   } else if (ValSizeInBits == 32) {
-    //     fuzzer::TPC.HandleCmp(PC + 2 * i, static_cast<uint32_t>(Val),
-    //                           (uint32_t)(Smaller));
-    //     fuzzer::TPC.HandleCmp(PC + 2 * i + 1, static_cast<uint32_t>(Val),
-    //                           (uint32_t)(Larger));
-    //   } else {
-    //     fuzzer::TPC.HandleCmp(PC + 2*i, Val, Smaller);
-    //     fuzzer::TPC.HandleCmp(PC + 2*i + 1, Val, Larger);
-    //   }
+    // Skip switches where every case and the value are small; the plain byte
+    // mutations already reach those and recording them only adds noise.
+    if vals[count - 1] < 256 || val < 256 {
+        return;
+    }
+
+    // Bracket val with the nearest case values so the comparison-value
+    // mutator can nudge the input toward an adjacent branch.
+    let mut smaller = 0u64;
+    let mut larger = u64::MAX;
+    for &case in vals {
+        if val < case {
+            larger = case;
+            break;
+        }
+        if val > case {
+            smaller = case;
+        }
+    }
+
+    // Dynamic operand is val (derived from input); const operand is the case
+    // the mutator should steer that value toward.
+    handle_cmp!(CmpOperand::Dynamic(val), CmpOperand::Constant(smaller), u64);
+    handle_cmp!(CmpOperand::Dynamic(val), CmpOperand::Constant(larger), u64);
+    record_pc(caller_address!());
 }
 
 #[no_mangle]
@@ -586,13 +551,7 @@ extern "C" fn __sanitizer_cov_trace_div4(_val: u32) {
     if !should_record_coverage() {
         return;
     }
-    let caller_pc = caller_address!();
-    TESTCASE_COVERAGE
-        .get()
-        .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE")
-        .insert(caller_pc);
+    record_pc(caller_address!());
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Val, (uint32_t)0);
 }
@@ -602,13 +561,7 @@ extern "C" fn __sanitizer_cov_trace_div8(_val: u64) {
     if !should_record_coverage() {
         return;
     }
-    let caller_pc = caller_address!();
-    TESTCASE_COVERAGE
-        .get()
-        .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE")
-        .insert(caller_pc);
+    record_pc(caller_address!());
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Val, (uint64_t)0);
 }
@@ -618,13 +571,7 @@ extern "C" fn __sanitizer_cov_trace_gep(_idx: *const std::ffi::c_void) {
     if !should_record_coverage() {
         return;
     }
-    let caller_pc = caller_address!();
-    TESTCASE_COVERAGE
-        .get()
-        .expect("failed to get TESTCASE_COVERAGE")
-        .lock()
-        .expect("failed to lock TESTCASE_COVERAGE")
-        .insert(caller_pc);
+    record_pc(caller_address!());
 
     //   uintptr_t PC = reinterpret_cast<uintptr_t>(GET_CALLER_PC());
     //   fuzzer::TPC.HandleCmp(PC, Idx, (uintptr_t)0);
