@@ -1,12 +1,12 @@
 use std::{
-    collections::{BTreeSet, HashSet},
     hash::Hasher,
     sync::atomic::{AtomicU64, AtomicU8, Ordering},
 };
 
 use crate::{
+    cmp::CmpOperand,
     driver::{
-        COMPARISON_OPERANDS, COV_THREADS, COV_THREADS_EMPTY, FAZI_INITIALIZED, PC_INFO,
+        PcEntry, COMPARISON_OPERANDS, COV_THREADS, COV_THREADS_EMPTY, FAZI_INITIALIZED, PC_INFO,
         TESTCASE_COVERAGE, U8_COUNTERS,
     },
     exports::fazi_initialize,
@@ -17,19 +17,6 @@ pub(crate) static GUARD_N: AtomicU64 = AtomicU64::new(0);
 // store in U64 and convert back to *mut usize
 pub(crate) static GUARD_START: AtomicU64 = AtomicU64::new(0);
 pub(crate) static GUARD_STOP: AtomicU64 = AtomicU64::new(0);
-
-#[derive(Debug)]
-#[repr(C)]
-pub(crate) struct PcEntry {
-    pub pc: usize,
-    pub flags: usize,
-}
-
-impl PcEntry {
-    pub(crate) fn is_fn_entry(&self) -> bool {
-        self.flags & 1 != 0
-    }
-}
 
 extern "C" {
     #[link_name = "llvm.returnaddress"]
@@ -43,109 +30,6 @@ macro_rules! caller_address {
 }
 pub(crate) use caller_address;
 use libc::c_char;
-
-#[derive(Debug, Clone)]
-pub(crate) enum CmpOperand<T: Clone> {
-    /// Represents a constant value in a comparison operation. e.g. if the x86
-    /// assembly is `cmp rax, 10`, we'd want to represent that the right-hand
-    /// side of this instruction was a constant value of 10.
-    Constant(T),
-    /// Represents a constant value in a comparison operation. e.g. if the x86
-    /// assembly is `cmp rax, 10`, where `rax` is 5, we'd want to represent that
-    /// the left-hand side of this instruction is a dynamic value of 5.
-    Dynamic(T),
-}
-
-impl<T: Clone> CmpOperand<T> {
-    pub fn inner(&self) -> T {
-        match self {
-            CmpOperand::Constant(val) => val.clone(),
-            CmpOperand::Dynamic(val) => val.clone(),
-        }
-    }
-
-    pub fn inner_ref(&self) -> &T {
-        match self {
-            CmpOperand::Constant(val) => val,
-            CmpOperand::Dynamic(val) => val,
-        }
-    }
-
-    pub fn is_const(&self) -> bool {
-        matches!(self, CmpOperand::Constant(_))
-    }
-
-    pub fn is_dynamic(&self) -> bool {
-        matches!(self, CmpOperand::Dynamic(_))
-    }
-}
-
-macro_rules! impl_try_from {
-    ($from:ty, $to:ty) => {
-        impl TryFrom<CmpOperand<$from>> for CmpOperand<$to> {
-            type Error = <$to as TryFrom<$from>>::Error;
-
-            fn try_from(value: CmpOperand<$from>) -> Result<Self, Self::Error> {
-                match value {
-                    CmpOperand::Constant(val) => Ok(CmpOperand::Constant(val.try_into()?)),
-                    CmpOperand::Dynamic(val) => Ok(CmpOperand::Dynamic(val.try_into()?)),
-                }
-            }
-        }
-    };
-}
-
-impl_try_from!(u64, u8);
-impl_try_from!(u64, u16);
-impl_try_from!(u64, u32);
-impl_try_from!(u32, u64);
-impl_try_from!(u32, u16);
-impl_try_from!(u32, u8);
-impl_try_from!(u16, u32);
-impl_try_from!(u16, u64);
-impl_try_from!(u16, u8);
-impl_try_from!(u8, u16);
-impl_try_from!(u8, u32);
-impl_try_from!(u8, u64);
-
-impl<T: Eq + Clone> Eq for CmpOperand<T> {}
-
-impl<T: PartialEq + Clone> PartialEq for CmpOperand<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.inner_ref() == other.inner_ref()
-    }
-}
-
-impl<T: PartialOrd + Clone> PartialOrd for CmpOperand<T> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.inner_ref().partial_cmp(other.inner_ref())
-    }
-}
-
-impl<T: Ord + Clone> Ord for CmpOperand<T> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.inner_ref().cmp(other.inner_ref())
-    }
-}
-
-#[derive(Debug, Default)]
-pub(crate) struct ComparisonOperandMap {
-    pub u8cov: BTreeSet<(CmpOperand<u8>, CmpOperand<u8>)>,
-    pub u16cov: BTreeSet<(CmpOperand<u16>, CmpOperand<u16>)>,
-    pub u32cov: BTreeSet<(CmpOperand<u32>, CmpOperand<u32>)>,
-    pub u64cov: BTreeSet<(CmpOperand<u64>, CmpOperand<u64>)>,
-    pub binary: HashSet<(Vec<u8>, Vec<u8>)>,
-}
-
-impl ComparisonOperandMap {
-    pub fn clear(&mut self) {
-        self.u8cov.clear();
-        self.u16cov.clear();
-        self.u32cov.clear();
-        self.u64cov.clear();
-        self.binary.clear();
-    }
-}
 
 #[inline]
 fn should_record_coverage() -> bool {
@@ -355,46 +239,11 @@ macro_rules! handle_cmp {
         }
         let mut constants = constants.unwrap();
 
-        let sizeof_type = std::mem::size_of::<$ty>();
-
-        if $arg1.inner() <= u8::MAX.try_into().unwrap()
-            && $arg2.inner() <= u8::MAX.try_into().unwrap()
-        {
-            constants.u8cov.insert((
-                $arg1.try_into().expect("failed to convert to cmp args u8"),
-                $arg2.try_into().expect("failed to convert to cmp args u8"),
-            ));
-        }
-
-        if sizeof_type >= 2
-            && $arg1.inner() <= u16::MAX.try_into().unwrap()
-            && $arg2.inner() <= u16::MAX.try_into().unwrap()
-        {
-            constants.u16cov.insert((
-                $arg1.try_into().expect("failed to convert to cmp args u32"),
-                $arg2.try_into().expect("failed to convert to cmp args u32"),
-            ));
-        }
-
-        if sizeof_type >= 4
-            && $arg1.inner() <= u32::MAX.try_into().unwrap()
-            && $arg2.inner() <= u32::MAX.try_into().unwrap()
-        {
-            constants.u32cov.insert((
-                $arg1.try_into().expect("failed to convert to cmp args u64"),
-                $arg2.try_into().expect("failed to convert to cmp args u64"),
-            ));
-        }
-
-        if sizeof_type >= 8
-            && $arg1.inner() <= u64::MAX.try_into().unwrap()
-            && $arg2.inner() <= u64::MAX.try_into().unwrap()
-        {
-            constants.u64cov.insert((
-                $arg1.try_into().expect("failed to convert to cmp args u64"),
-                $arg2.try_into().expect("failed to convert to cmp args u64"),
-            ));
-        }
+        constants.insert(
+            std::mem::size_of::<$ty>(),
+            $arg1.map(u64::from),
+            $arg2.map(u64::from),
+        );
     };
 }
 

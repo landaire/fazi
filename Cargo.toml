@@ -33,16 +33,23 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 
 [features]
-default = ["hook_builtins", "structured_fuzzing"]
-main_entrypoint = ["dep:indicatif"]
-hook_memcmp = []
-hook_bcmp = []
-hook_strncmp = []
-hook_strncasecmp = []
-hook_strcasecmp = []
-hook_strstr = []
-hook_strcasestr = []
-hook_memem = []
+default = ["sancov", "hook_builtins", "structured_fuzzing"]
+# SanitizerCoverage runtime for instrumented host code (callbacks, libc
+# comparison hooks, sanitizer integration). Requires a nightly toolchain.
+sancov = []
+# API for targets whose execution the host does not instrument, such as
+# emulators: coverage and comparisons are reported by the embedder. Builds on
+# stable.
+embed = []
+main_entrypoint = ["sancov", "dep:indicatif"]
+hook_memcmp = ["sancov"]
+hook_bcmp = ["sancov"]
+hook_strncmp = ["sancov"]
+hook_strncasecmp = ["sancov"]
+hook_strcasecmp = ["sancov"]
+hook_strstr = ["sancov"]
+hook_strcasestr = ["sancov"]
+hook_memem = ["sancov"]
 hook_builtins = [
     "hook_memcmp",
     "hook_bcmp",
@@ -58,6 +65,10 @@ protobuf = ["dep:protobuf", "structured_fuzzing"]
 
 [[example]]
 name = "simple_harness"
+
+[[test]]
+name = "embed"
+required-features = ["embed"]
 
 [profile.release]
 panic = 'abort'

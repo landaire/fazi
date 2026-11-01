@@ -169,18 +169,23 @@ impl Fazi<StdRng> {
     /// is present
     pub fn set_options(&mut self, options: RuntimeOptions) {
         if let Some(seed) = options.seed {
-            let mut hasher = Sha256::new();
-            hasher.update(seed.to_be_bytes());
-            let result = hasher.finalize();
-            self.rng = StdRng::from_seed(
-                result
-                    .try_into()
-                    .expect("failed to convert seed hash input to 32-byte array"),
-            )
+            self.rng = rng_from_seed(seed);
         }
 
         self.options = options;
     }
+}
+
+/// The RNG Fazi uses for a user-provided seed
+pub(crate) fn rng_from_seed(seed: u64) -> StdRng {
+    let mut hasher = Sha256::new();
+    hasher.update(seed.to_be_bytes());
+    let result = hasher.finalize();
+    StdRng::from_seed(
+        result
+            .try_into()
+            .expect("failed to convert seed hash input to 32-byte array"),
+    )
 }
 
 const MAX_MUTATION_DEPTH: usize = 100;
@@ -396,27 +401,7 @@ impl<R: Rng> Fazi<R> {
             return;
         }
 
-        COMPARISON_OPERANDS
-            .set(Default::default())
-            .expect("CONSTANTS already initialized");
-        COVERAGE
-            .set(Default::default())
-            .expect("COVERAGE already initialized");
-        TESTCASE_COVERAGE
-            .set(Default::default())
-            .expect("TESTCASE_COVERAGE already initialized");
-        U8_COUNTERS
-            .set(Default::default())
-            .expect("U8_COUNTERS already initialized");
-        PC_INFO
-            .set(Default::default())
-            .expect("PC_INFO already initialized");
-        COV_THREADS
-            .set(Default::default())
-            .expect("COV_THREADS already initialized");
-        LAST_INPUT
-            .set(Default::default())
-            .expect("LAST_INPUT already initialized");
+        init_shared_state();
 
         FAZI_INITIALIZED.store(true, Ordering::Relaxed);
     }
@@ -442,6 +427,19 @@ impl<R: Rng> Fazi<R> {
             );
         }
     }
+}
+
+/// Creates the global coverage and comparison tables if they do not exist yet.
+/// Unlike [`Fazi::initialize_globals`] this does not enable the SanCov
+/// callbacks.
+pub(crate) fn init_shared_state() {
+    COMPARISON_OPERANDS.get_or_init(Default::default);
+    COVERAGE.get_or_init(Default::default);
+    TESTCASE_COVERAGE.get_or_init(Default::default);
+    U8_COUNTERS.get_or_init(Default::default);
+    PC_INFO.get_or_init(Default::default);
+    COV_THREADS.get_or_init(Default::default);
+    LAST_INPUT.get_or_init(Default::default);
 }
 
 pub struct FaziBuilder<'a, R: Rng = StdRng> {

@@ -9,10 +9,10 @@ use libc::{SIGABRT, SIGSEGV};
 use rand::Rng;
 use signal_hook::iterator::Signals;
 
+#[cfg(feature = "sancov")]
+use crate::weak_imports::{sanitizer_set_death_callback_fn, sanitizer_set_report_path_fn};
 use crate::{
     driver::{handle_crash, save_input, CRASHES_DIR, INPUTS_DIR, INPUTS_EXTENSION, LAST_INPUT},
-    weak_imports::sanitizer_set_death_callback_fn,
-    weak_imports::sanitizer_set_report_path_fn,
     Fazi,
 };
 
@@ -22,6 +22,7 @@ impl<R: Rng> Fazi<R> {
     pub fn setup_signal_handler(&self) {
         let mut signals = Signals::new(&[SIGABRT]).expect("failed to setup signal handler");
 
+        #[cfg(feature = "sancov")]
         if let Some(set_death_callback) = sanitizer_set_death_callback_fn() {
             eprintln!("Setting death callback");
             unsafe {
@@ -54,6 +55,7 @@ impl<R: Rng> Fazi<R> {
         }));
     }
 
+    #[cfg(feature = "sancov")]
     pub fn setup_sanitizer_report_path(&self, report_path: *const char) {
     	if let Some(set_report_path) = sanitizer_set_report_path_fn() {
             unsafe {

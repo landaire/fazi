@@ -14,9 +14,10 @@ use crate::{
         ENABLE_COUNTERS, FAZI, FAZI_INITIALIZED, FAZI_STATS_FILE, INPUTS_DIR, INPUTS_EXTENSION,
     },
     options::RuntimeOptions,
-    sancov::reset_pc_guards,
     Fazi,
 };
+#[cfg(feature = "sancov")]
+use crate::sancov::reset_pc_guards;
 
 #[no_mangle]
 /// Main function for initializing the Fazi global state
@@ -44,6 +45,7 @@ pub extern "C" fn fazi_init_signal_handler() {
     fazi.setup_signal_handler();
 }
 
+#[cfg(feature = "sancov")]
 #[no_mangle]
 /// Sets up custom sanitizer report path
 pub extern "C" fn fazi_set_sanitizer_report_path(path: *const libc::c_char) {
@@ -384,6 +386,7 @@ pub extern "C" fn fazi_enable_cov_counters() {
 /// Reset guard variables sent in user defined callback that measures code coverage
 /// Reset fazi internal coverage as well
 pub extern "C" fn fazi_reset_coverage() {
+    #[cfg(feature = "sancov")]
     reset_pc_guards();
     let mut fazi = FAZI
         .get()

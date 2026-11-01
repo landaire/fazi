@@ -4,17 +4,11 @@ use rand::{
     Rng,
 };
 use serde::{Deserialize, Serialize};
-use sha1::{
-    digest::{generic_array::GenericArray, Output},
-    Digest, Sha1,
-};
+use sha1::{Digest, Sha1};
 
-use crate::{
-    dictionary::DictionaryEntry,
-    sancov::{ComparisonOperandMap, PcEntry},
-    weak_imports::*,
-    CorpusMetadata, Fazi, Input,
-};
+#[cfg(feature = "sancov")]
+use crate::weak_imports::*;
+use crate::{cmp::ComparisonOperandMap, dictionary::DictionaryEntry, CorpusMetadata, Fazi, Input};
 use std::{
     collections::{HashMap, HashSet},
     io::Write,
@@ -43,6 +37,21 @@ pub(crate) static FAZI_INITIALIZED: AtomicBool = AtomicBool::new(false);
 pub(crate) static U8_COUNTERS: OnceCell<Mutex<Vec<&'static [AtomicU8]>>> = OnceCell::new();
 /// PC info corresponding to the U8 counters.
 pub(crate) static PC_INFO: OnceCell<Mutex<Vec<&'static [PcEntry]>>> = OnceCell::new();
+
+/// One entry of a SanCov PC table (`-fsanitize-coverage=pc-table`).
+#[derive(Debug)]
+#[repr(C)]
+pub(crate) struct PcEntry {
+    pub pc: usize,
+    pub flags: usize,
+}
+
+impl PcEntry {
+    pub(crate) fn is_fn_entry(&self) -> bool {
+        self.flags & 1 != 0
+    }
+}
+
 /// Restricts coverage updates to specified threads.  Empty set will allow all threads.
 pub(crate) static COV_THREADS: OnceCell<RwLock<HashSet<usize>>> = OnceCell::new();
 /// Mirrors whether COV_THREADS is empty so the coverage callbacks can take
@@ -189,13 +198,58 @@ impl<R: Rng> Fazi<R> {
     pub fn end_iteration(&mut self, need_more_data: bool) {
         unpoison_input(self.input.as_ref());
 
+        let summary = self.finish_iteration(need_more_data);
+
+        if let Some(input) = summary.new_corpus_input {
+            eprintln!(
+                "old coverage: {}, new coverage: {}, mutations: {:?}",
+                summary.old_coverage, summary.new_coverage, summary.mutation_count
+            );
+
+            let corpus_dir: &Path = INPUTS_DIR
+                .get()
+                .as_ref()
+                .expect("INPUTS_DIR not initialized");
+            let extension: Option<&String> = INPUTS_EXTENSION.get();
+            let extension = extension.map(|e| e.as_ref());
+
+            std::thread::spawn(move || {
+                save_input(corpus_dir.as_ref(), extension, input.as_slice());
+            });
+        }
+
+        if self.last_update_time.elapsed().as_secs() >= STATUS_UPDATE_FREQ_SECS {
+            let fazi_stats = crate::fazi::FaziStats {
+                iterations: self.iterations,
+                corpus: self.corpus.len(),
+                current_mutation_depth: self.current_mutation_depth,
+                current_max_input_len: self.current_max_input_len,
+                coverage: summary.new_coverage,
+                last_update_time: SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+            };
+
+            eprintln!("stats: {:?}", fazi_stats);
+            std::thread::spawn(move || {
+                write_fazi_stats(&fazi_stats);
+            });
+            self.last_update_time = Instant::now();
+        }
+    }
+
+    /// Collects the coverage of the input that just ran, keeps the input in
+    /// the corpus if it reached new coverage, and mutates the next input.
+    /// Performs no I/O; callers decide how to persist new corpus entries.
+    pub(crate) fn finish_iteration(&mut self, need_more_data: bool) -> IterationSummary {
         let UpdateCoverageResult {
             new_pc_count: new_coverage,
             old_pc_count: old_coverage,
             input_cov: input_coverage,
-            old_cov_hash,
-            new_cov_hash,
         } = update_coverage();
+        let mutation_count = self.mutations.len();
+        let mut new_corpus_input = None;
 
         if !need_more_data {
             let min_input_size = if let Some(min_input_size) = self.min_input_size {
@@ -213,14 +267,7 @@ impl<R: Rng> Fazi<R> {
             .map(|p| p >= 1.0)
             .unwrap_or(false);
 
-        if !only_replay && old_cov_hash != new_cov_hash {
-            eprintln!(
-                "old coverage: {}, new coverage: {}, mutations: {:?}",
-                old_coverage,
-                new_coverage,
-                self.mutations.len()
-            );
-
+        if !only_replay && new_coverage != old_coverage {
             // Check if this new coverage was the result of a dictionary entry
             if let Some(entry) = self.last_dictionary_input.take() {
                 match entry {
@@ -247,17 +294,7 @@ impl<R: Rng> Fazi<R> {
                 data: self.input.clone(),
             });
 
-            let input = self.input.clone();
-            let corpus_dir: &Path = INPUTS_DIR
-                .get()
-                .as_ref()
-                .expect("INPUTS_DIR not initialized");
-            let extension: Option<&String> = INPUTS_EXTENSION.get();
-            let extension = extension.map(|e| e.as_ref());
-
-            std::thread::spawn(move || {
-                save_input(corpus_dir.as_ref(), extension, input.as_slice());
-            });
+            new_corpus_input = Some(self.input.clone());
 
             self.current_mutation_depth = 0;
             self.mutations.clear();
@@ -321,26 +358,23 @@ impl<R: Rng> Fazi<R> {
 
         self.iterations += 1;
 
-        if self.last_update_time.elapsed().as_secs() >= STATUS_UPDATE_FREQ_SECS {
-            let fazi_stats = crate::fazi::FaziStats {
-                iterations: self.iterations,
-                corpus: self.corpus.len(),
-                current_mutation_depth: self.current_mutation_depth,
-                current_max_input_len: self.current_max_input_len,
-                coverage: new_coverage,
-                last_update_time: SystemTime::now()
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
-            };
-
-            eprintln!("stats: {:?}", fazi_stats);
-            std::thread::spawn(move || {
-                write_fazi_stats(&fazi_stats);
-            });
-            self.last_update_time = Instant::now();
+        IterationSummary {
+            old_coverage,
+            new_coverage,
+            mutation_count,
+            new_corpus_input,
         }
     }
+}
+
+/// Outcome of [`Fazi::finish_iteration`].
+pub(crate) struct IterationSummary {
+    pub old_coverage: usize,
+    pub new_coverage: usize,
+    /// Number of mutations applied to the input that just ran
+    pub mutation_count: usize,
+    /// The input that just ran, if it reached new coverage and joined the corpus
+    pub new_corpus_input: Option<Arc<Vec<u8>>>,
 }
 
 pub(crate) fn clear_coverage() {
@@ -378,18 +412,6 @@ pub struct UpdateCoverageResult {
     pub new_pc_count: usize,
     pub old_pc_count: usize,
     pub input_cov: usize,
-    pub old_cov_hash: Output<Sha1>,
-    pub new_cov_hash: Output<Sha1>,
-}
-
-fn coverage_hash(cov: &HashMap<usize, usize>) -> Output<Sha1> {
-    let mut hash = Sha1::new();
-    for (key, value) in cov {
-        hash.update(key.to_be_bytes().as_slice());
-        hash.update(value.to_be_bytes().as_slice());
-    }
-
-    hash.finalize()
 }
 
 pub(crate) fn update_coverage() -> UpdateCoverageResult {
@@ -398,8 +420,6 @@ pub(crate) fn update_coverage() -> UpdateCoverageResult {
         .expect("failed to get COVERAGE")
         .lock()
         .expect("failed to lock COVERAGE");
-
-    let old_cov_hash = coverage_hash(&coverage);
 
     let mut testcase_coverage = TESTCASE_COVERAGE
         .get()
@@ -439,32 +459,51 @@ pub(crate) fn update_coverage() -> UpdateCoverageResult {
         }
     }
 
+    #[cfg(feature = "embed")]
+    if let Some(counters) = crate::embed::registered_counters() {
+        for (feature, counter) in counters.iter().enumerate() {
+            if counter.load(Ordering::Relaxed) > 0 {
+                *coverage.entry(feature).or_default() = 1;
+                counter.store(0, Ordering::Relaxed);
+                input_coverage += 1;
+            }
+        }
+    }
+
     for pc in testcase_coverage.drain() {
         if let None = coverage.get(&pc) {
             coverage.insert(pc, 1);
         }
     }
 
-    let new_cov_hash = coverage_hash(&coverage);
-
     UpdateCoverageResult {
         new_pc_count: coverage.len(),
         old_pc_count: old_coverage,
         input_cov: input_coverage,
-        old_cov_hash: old_cov_hash,
-        new_cov_hash: new_cov_hash,
     }
 }
 
-pub(crate) fn handle_crash(crashes_dir: &Path, extension: Option<&str>, input: &[u8]) {
+/// Path of the artifact file for `input`: `<dir>/<prefix>-<sha1 of input>[.extension]`
+pub(crate) fn artifact_path(
+    dir: &Path,
+    prefix: &str,
+    extension: Option<&str>,
+    input: &[u8],
+) -> PathBuf {
     let mut hasher = Sha1::new();
     hasher.update(input);
     let result = hasher.finalize();
     let filename = hex::encode(result.as_slice());
-    let mut crash_file_path = crashes_dir.join(format!("crash-{}", filename));
+    let mut path = dir.join(format!("{}-{}", prefix, filename));
     if let Some(extension) = extension {
-        crash_file_path.set_extension(extension);
+        path.set_extension(extension);
     }
+
+    path
+}
+
+pub(crate) fn handle_crash(crashes_dir: &Path, extension: Option<&str>, input: &[u8]) {
+    let crash_file_path = artifact_path(crashes_dir, "crash", extension, input);
 
     eprintln!("Saving crash to {:?}", crash_file_path);
     ensure_parent_dir_exists(crash_file_path.as_ref());
@@ -476,7 +515,7 @@ pub(crate) fn handle_crash(crashes_dir: &Path, extension: Option<&str>, input: &
             if let Ok(mut metadata) = metadata.try_lock() {
                 metadata
                     .ignore_input_hashes
-                    .insert(result.as_slice().to_vec());
+                    .insert(Sha1::digest(input).to_vec());
 
                 if let Ok(mut output) = std::fs::File::create("corpus_metadata.json") {
                     let _ = serde_json::to_writer(&mut output, &*metadata);
@@ -497,14 +536,7 @@ fn write_fazi_stats(stats: &crate::fazi::FaziStats) {
 }
 
 pub(crate) fn save_input(corpus_dir: &Path, extension: Option<&str>, input: &[u8]) {
-    let mut hasher = Sha1::new();
-    hasher.update(input);
-    let result = hasher.finalize();
-    let filename = hex::encode(result.as_slice());
-    let mut corpus_file_path = corpus_dir.join(format!("input-{}", filename));
-    if let Some(extension) = extension {
-        corpus_file_path.set_extension(extension);
-    }
+    let corpus_file_path = artifact_path(corpus_dir, "input", extension, input);
 
     eprintln!("Saving corpus input to {:?}", corpus_file_path);
 
@@ -525,38 +557,48 @@ fn ensure_parent_dir_exists(path: &Path) {
     }
 }
 
-/// Marks all bytes of the input buffer's allocated data as addressable
+/// Marks all bytes of the input buffer's allocated data as addressable. Only
+/// the host sanitizer runtimes (`sancov` feature) track this.
+#[cfg_attr(not(feature = "sancov"), allow(unused_variables))]
 pub(crate) fn unpoison_input(input: &Vec<u8>) {
-    let input_ptr = input.as_ptr();
+    #[cfg(feature = "sancov")]
+    {
+        let input_ptr = input.as_ptr();
 
-    if let Some(asan_unpoison) = asan_unpoison_memory_region_fn() {
-        unsafe {
-            asan_unpoison(input_ptr, input.capacity());
+        if let Some(asan_unpoison) = asan_unpoison_memory_region_fn() {
+            unsafe {
+                asan_unpoison(input_ptr, input.capacity());
+            }
         }
-    }
 
-    if let Some(msan_unpoison) = msan_unpoison_memory_region_fn() {
-        unsafe {
-            msan_unpoison(input_ptr, input.capacity());
+        if let Some(msan_unpoison) = msan_unpoison_memory_region_fn() {
+            unsafe {
+                msan_unpoison(input_ptr, input.capacity());
+            }
         }
     }
 }
 
 /// Marks the difference between the input's buffer's length and capacity as
-/// unaddressable
+/// unaddressable. Only the host sanitizer runtimes (`sancov` feature) track
+/// this.
+#[cfg_attr(not(feature = "sancov"), allow(unused_variables))]
 pub(crate) fn poison_input(input: &Vec<u8>) {
-    let unaddressable_bytes = input.capacity() - input.len();
-    let unaddressable_start = unsafe { input.as_ptr().offset(input.len() as isize) };
+    #[cfg(feature = "sancov")]
+    {
+        let unaddressable_bytes = input.capacity() - input.len();
+        let unaddressable_start = unsafe { input.as_ptr().offset(input.len() as isize) };
 
-    if let Some(asan_poison) = asan_poison_memory_region_fn() {
-        unsafe {
-            asan_poison(unaddressable_start, unaddressable_bytes);
+        if let Some(asan_poison) = asan_poison_memory_region_fn() {
+            unsafe {
+                asan_poison(unaddressable_start, unaddressable_bytes);
+            }
         }
-    }
 
-    if let Some(msan_unpoison) = msan_poison_memory_region_fn() {
-        unsafe {
-            msan_unpoison(unaddressable_start, unaddressable_bytes);
+        if let Some(msan_unpoison) = msan_poison_memory_region_fn() {
+            unsafe {
+                msan_unpoison(unaddressable_start, unaddressable_bytes);
+            }
         }
     }
 }

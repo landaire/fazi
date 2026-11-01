@@ -23,13 +23,19 @@ Anything else that's missing from [libFuzzer's featureset](https://www.llvm.org/
 
 ## Usage
 
-Step 1: Build fazi (requires Rust nightly):
+Step 1: Build fazi (the default `sancov` feature requires Rust nightly):
 
 ```bash
 $ cargo build --release
 ```
 
-*Note: Fazi can also be built without the main entrypoint by providing the `--no-default-features` flag*
+Cargo features:
+
+- `sancov` (default): SanitizerCoverage runtime for instrumented host code, libc comparison hooks and
+  sanitizer integration. Requires nightly. The `hook_*` and `main_entrypoint` features imply it.
+- `main_entrypoint`: provides `main()` that drives `LLVMFuzzerTestOneInput`.
+- `embed`: API for targets whose execution the host does not instrument, such as emulators (see
+  [Embedding](#embedding-fuzzing-emulated-targets)). Builds on stable with `default-features = false`.
 
 Step 2: Build your harness:
 
@@ -47,7 +53,7 @@ $ ./a.out
 
 You can list command-line options with the `--help` flag:
 
-```
+```text
 fazi
 
 USAGE:
@@ -103,6 +109,77 @@ cargo rustc --no-default-features --features=hook_builtins --example simple_harn
     -Z sanitizer=address
 
 ./target/debug/examples/simple_harness
+```
+
+## Embedding: fuzzing emulated targets
+
+When the code under test runs in an emulator or interpreter, the host has nothing to instrument. The `embed`
+feature lets the embedder report coverage and comparisons itself and drive a bounded fuzzing session from Rust.
+It builds on stable Rust:
+
+```toml
+[dependencies]
+fazi = { git = "https://github.com/landaire/fazi", rev = "<commit>", default-features = false, features = ["embed"] }
+```
+
+The API lives in `fazi::embed`:
+
+- `run(options: SessionOptions, target: impl FnMut(&[u8]) -> bool) -> Result<SessionStats, SessionError>` runs
+  one session. The closure runs one input and returns `true` if the input is a failure (for example a behaviour
+  difference between two implementations). Failures are collected, written to `crashes_dir` as `crash-<sha1>`,
+  and the session continues unless `stop_on_failure` is set.
+- `SessionOptions`: `seed`, `max_input_len`, `len_control`, `max_mutation_depth`, `max_iterations` and/or
+  `max_time` (at least one is required), `corpus_dir` (loaded as seeds, receives new corpus entries as
+  `input-<sha1>`), `crashes_dir`, `seeds`, `counters` and `stop_on_failure`.
+- `SessionStats`: `iterations` (target runs, seeds included), `corpus_len`, `coverage` (distinct features) and
+  `failures` (distinct failing inputs in discovery order).
+- Coverage: bump the `&'static [AtomicU8]` passed as `SessionOptions::counters` (counter `i` is feature `i`;
+  fazi zeroes the counters before every input) and/or call `record_feature(id: u64)`. Inputs that reach a
+  feature not seen before join the corpus, as with SanCov.
+- Comparisons: `record_cmp1`, `record_cmp2`, `record_cmp4` and `record_cmp8` take a caller-chosen `site: u64`
+  and two `CmpOperand`s (`Constant` or `Dynamic`) of the matching width. The operands feed the compare-operand
+  mutator and the dictionary exactly like `__sanitizer_cov_trace_cmp*`; the site is also recorded as a coverage
+  feature, so keep site ids and counter/feature ids in disjoint ranges.
+
+Sessions do not install signal handlers or panic hooks, read the command line or exit the process; a panic in
+the target propagates to the caller of `run`. The coverage and comparison tables are process globals: sessions
+run one at a time (concurrent `run` calls wait for each other, a nested call returns `SessionError::Nested`),
+every session starts from empty tables, and recording calls made while no session runs are ignored. With the
+same seed and the same target behaviour a session produces the same inputs.
+
+```rust,ignore
+use std::sync::atomic::{AtomicU8, Ordering};
+
+use fazi::embed::{self, CmpOperand, SessionOptions};
+
+static COUNTERS: [AtomicU8; 4] = [const { AtomicU8::new(0) }; 4];
+
+fn emulate(input: &[u8]) -> bool {
+    let Some(word) = input.get(..4) else {
+        COUNTERS[0].fetch_add(1, Ordering::Relaxed);
+        return false;
+    };
+    let word = u32::from_be_bytes(word.try_into().unwrap());
+    // The emulated `cmpwi` at guest address 0x8000_1234
+    embed::record_cmp4(0x8000_1234, CmpOperand::Dynamic(word), CmpOperand::Constant(0xDEAD_BEEF));
+    let taken = word == 0xDEAD_BEEF;
+    COUNTERS[1 + usize::from(taken)].fetch_add(1, Ordering::Relaxed);
+    taken
+}
+
+let stats = embed::run(
+    SessionOptions {
+        seed: 1,
+        max_input_len: 64,
+        max_iterations: Some(10_000),
+        counters: Some(&COUNTERS),
+        stop_on_failure: true,
+        ..SessionOptions::default()
+    },
+    emulate,
+)
+.unwrap();
+assert_eq!(stats.failures.len(), 1);
 ```
 
 ## Why
